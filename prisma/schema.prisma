@@ -1,0 +1,342 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  vendedor
+  gestor
+  lojista
+  admin
+}
+
+enum UrgencyLevel {
+  baixa
+  media
+  alta
+}
+
+enum WishStatus {
+  procurando
+  match_encontrado
+  em_negociacao
+  convertido
+  perdido
+  expirado
+}
+
+enum OfferSource {
+  avaliador
+  marketplace
+  estoque_lojista
+}
+
+enum MatchStatus {
+  novo
+  notificado
+  aceito
+  rejeitado
+  convertido
+}
+
+enum NotificationChannel {
+  whatsapp
+  email
+  sistema
+}
+
+enum NotificationStatus {
+  pendente
+  enviado
+  entregue
+  lido
+  respondido
+  erro
+}
+
+enum TransmissionType {
+  manual
+  automatico
+  indiferente
+}
+
+enum FuelType {
+  flex
+  gasolina
+  diesel
+  hibrido
+  eletrico
+  indiferente
+}
+
+enum UploadFormat {
+  csv
+  xls
+  xlsx
+  pdf
+}
+
+enum UploadStatus {
+  processando
+  concluido
+  erro
+  revisao_pendente
+}
+
+model User {
+  id             String       @id @default(cuid())
+  name           String
+  email          String       @unique
+  emailVerified  DateTime?
+  passwordHash   String?
+  phone          String?
+  role           UserRole     @default(vendedor)
+  dealershipId   String?
+  dealerStoreId  String?
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  dealership     Dealership?  @relation(fields: [dealershipId], references: [id])
+  dealerStore    DealerStore? @relation(fields: [dealerStoreId], references: [id])
+  wishes         Wish[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  accounts       Account[]
+  sessions       Session[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Dealership {
+  id        String   @id @default(cuid())
+  name      String
+  cnpj      String   @unique
+  city      String
+  state     String   @db.Char(2)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  wishes    Wish[]
+
+  @@map("dealerships")
+}
+
+model DealerStore {
+  id              String   @id @default(cuid())
+  name            String
+  cnpj            String   @unique
+  city            String
+  state           String   @db.Char(2)
+  active          Boolean  @default(true)
+  canalRepasseId  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users           User[]
+  stockUploads    StockUpload[]
+  offers          Offer[]
+
+  @@map("dealer_stores")
+}
+
+model Wish {
+  id             String          @id @default(cuid())
+  sellerId       String
+  dealershipId   String?
+  clientName     String
+  clientPhone    String
+  clientCpf      String?
+  clientEmail    String?
+  brand          String
+  model          String
+  version        String?
+  yearMin        Int?
+  yearMax        Int?
+  kmMax          Int?
+  priceMin       Float?
+  priceMax       Float?
+  colors         String[]        @default([])
+  transmission   TransmissionType @default(indiferente)
+  fuel           FuelType        @default(indiferente)
+  cityRef        String?
+  stateRef       String?         @db.Char(2)
+  radiusKm       Int             @default(100)
+  urgency        UrgencyLevel    @default(media)
+  validityDays   Int             @default(30)
+  notes          String?
+  lgpdConsent    Boolean         @default(false)
+  status         WishStatus      @default(procurando)
+  createdAt      DateTime        @default(now())
+  expiresAt      DateTime
+  updatedAt      DateTime        @updatedAt
+
+  seller         User            @relation(fields: [sellerId], references: [id])
+  dealership     Dealership?     @relation(fields: [dealershipId], references: [id])
+  matches        Match[]
+
+  @@index([status])
+  @@index([brand, model])
+  @@index([sellerId])
+  @@index([expiresAt])
+  @@map("wishes")
+}
+
+model Offer {
+  id             String      @id @default(cuid())
+  source         OfferSource
+  sourceId       String
+  plate          String?
+  brand          String
+  model          String
+  version        String?
+  year           Int
+  km             Int
+  color          String?
+  price          Float
+  city           String
+  state          String      @db.Char(2)
+  active         Boolean     @default(true)
+  dealerStoreId  String?
+  syncedAt       DateTime    @default(now())
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  dealerStore    DealerStore? @relation(fields: [dealerStoreId], references: [id])
+  matches        Match[]
+
+  @@unique([source, sourceId])
+  @@index([brand, model])
+  @@index([active])
+  @@index([source])
+  @@map("offers")
+}
+
+model Match {
+  id            String       @id @default(cuid())
+  wishId        String
+  offerId       String
+  score         Float
+  status        MatchStatus  @default(novo)
+  createdAt     DateTime     @default(now())
+  convertedAt   DateTime?
+  updatedAt     DateTime     @updatedAt
+
+  wish          Wish         @relation(fields: [wishId], references: [id])
+  offer         Offer        @relation(fields: [offerId], references: [id])
+  notifications Notification[]
+
+  @@unique([wishId, offerId])
+  @@index([status])
+  @@index([score])
+  @@map("matches")
+}
+
+model Notification {
+  id            String              @id @default(cuid())
+  matchId       String
+  recipientId   String
+  channel       NotificationChannel @default(whatsapp)
+  template      String
+  content       String
+  status        NotificationStatus  @default(pendente)
+  sentAt        DateTime?
+  readAt        DateTime?
+  respondedAt   DateTime?
+  createdAt     DateTime            @default(now())
+
+  match         Match               @relation(fields: [matchId], references: [id])
+  recipient     User                @relation(fields: [recipientId], references: [id])
+
+  @@index([status])
+  @@index([recipientId])
+  @@index([matchId])
+  @@map("notifications")
+}
+
+model StockUpload {
+  id              String       @id @default(cuid())
+  dealerStoreId   String
+  fileUrl         String
+  format          UploadFormat
+  status          UploadStatus @default(processando)
+  linesProcessed  Int          @default(0)
+  linesWithError  Int          @default(0)
+  errorDetails    Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  dealerStore     DealerStore  @relation(fields: [dealerStoreId], references: [id])
+
+  @@map("stock_uploads")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  entity      String
+  entityId    String?
+  dataBefore  Json?
+  dataAfter   Json?
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model FipeReference {
+  id        String @id @default(cuid())
+  brand     String
+  model     String
+  version   String?
+  yearStart Int?
+  yearEnd   Int?
+  fipeCode  String?
+
+  @@index([brand])
+  @@index([brand, model])
+  @@map("fipe_references")
+}
