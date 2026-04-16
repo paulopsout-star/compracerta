@@ -43,96 +43,140 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-surface-muted: var(--surface-muted);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: 24px;
+  --radius-3xl: 24px;
+  --radius-4xl: 24px;
 }
 
-/* Canal do Repasse - Compra Certa Design System */
-/* Paleta: Azul corporativo B2B + Âmbar para CTAs + Cinzas neutros */
+/*
+ * Compra Certa — Design System v2
+ * Padrão TradoX (layout/hierarquia) + Paleta Canal do Repasse (azul corporativo)
+ *
+ * Cores primárias extraídas do Canal do Repasse:
+ *   Azul primário: #2563EB (oklch 0.546 0.195 262)
+ *   Azul hover:    #1D4ED8 (oklch 0.488 0.195 262)
+ *   Azul light:    rgba(37,99,235,0.10)
+ *
+ * Layout TradoX:
+ *   Cards: border-radius 16px, shadow-card, padding 24-32px
+ *   Sidebar: fundo #F7F8FA, item ativo com bg azul light
+ *   Topbar: busca pill-shape, saudação à esquerda
+ */
+
 :root {
-  --background: oklch(0.98 0.002 250);
-  --foreground: oklch(0.15 0.015 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.015 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.015 250);
-  /* Azul corporativo Canal do Repasse */
-  --primary: oklch(0.45 0.18 255);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.005 250);
-  --secondary-foreground: oklch(0.25 0.03 250);
-  --muted: oklch(0.95 0.005 250);
-  --muted-foreground: oklch(0.50 0.02 250);
-  --accent: oklch(0.96 0.005 250);
-  --accent-foreground: oklch(0.25 0.03 250);
-  --destructive: oklch(0.55 0.22 25);
-  --border: oklch(0.90 0.005 250);
-  --input: oklch(0.90 0.005 250);
-  --ring: oklch(0.45 0.18 255);
+  /* Canvas */
+  --background: #F7F8FA;
+  --foreground: #111827;
+
+  /* Cards / Surfaces */
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --popover: #FFFFFF;
+  --popover-foreground: #111827;
+  --surface-muted: #F7F8FA;
+
+  /* Primary — Azul Canal do Repasse */
+  --primary: #2563EB;
+  --primary-foreground: #FFFFFF;
+
+  /* Secondary — Cinza quase preto (botões secundários TradoX) */
+  --secondary: #1A1D23;
+  --secondary-foreground: #FFFFFF;
+
+  /* Muted */
+  --muted: #F1F3F5;
+  --muted-foreground: #5B6370;
+
+  /* Accent — azul light transparente para hover/active */
+  --accent: rgba(37,99,235,0.08);
+  --accent-foreground: #2563EB;
+
+  /* Destructive */
+  --destructive: #E5484D;
+
+  /* Borders */
+  --border: #E8EAEE;
+  --input: #E8EAEE;
+  --ring: #2563EB;
+
   /* Semantic */
-  --warning: oklch(0.75 0.15 75);
-  --warning-foreground: oklch(0.25 0.05 75);
-  --success: oklch(0.60 0.15 150);
-  --success-foreground: oklch(0.99 0 0);
+  --warning: #F5A524;
+  --warning-foreground: #7C2D12;
+  --success: #2563EB;
+  --success-foreground: #FFFFFF;
+
   /* Charts */
-  --chart-1: oklch(0.45 0.18 255);
-  --chart-2: oklch(0.60 0.15 150);
-  --chart-3: oklch(0.75 0.15 75);
-  --chart-4: oklch(0.55 0.22 25);
-  --chart-5: oklch(0.55 0.15 300);
-  --radius: 0.625rem;
-  /* Sidebar */
-  --sidebar: oklch(0.22 0.04 250);
-  --sidebar-foreground: oklch(0.92 0.01 250);
-  --sidebar-primary: oklch(0.55 0.20 255);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.30 0.05 250);
-  --sidebar-accent-foreground: oklch(0.92 0.01 250);
-  --sidebar-border: oklch(0.32 0.04 250);
-  --sidebar-ring: oklch(0.55 0.20 255);
+  --chart-1: #2563EB;
+  --chart-2: #3B82F6;
+  --chart-3: #60A5FA;
+  --chart-4: #93C5FD;
+  --chart-5: #BFDBFE;
+
+  --radius: 16px;
+
+  /* Sidebar — TradoX: fundo cinza muito claro */
+  --sidebar: #F7F8FA;
+  --sidebar-foreground: #5B6370;
+  --sidebar-primary: #2563EB;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(37,99,235,0.10);
+  --sidebar-accent-foreground: #2563EB;
+  --sidebar-border: #EEF0F3;
+  --sidebar-ring: #2563EB;
+
+  /* Shadows — TradoX style */
+  --shadow-card: 0 2px 8px rgba(16, 24, 40, 0.04);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.08);
 }
 
 .dark {
-  --background: oklch(0.14 0.015 250);
-  --foreground: oklch(0.95 0.005 250);
-  --card: oklch(0.20 0.02 250);
-  --card-foreground: oklch(0.95 0.005 250);
-  --popover: oklch(0.20 0.02 250);
-  --popover-foreground: oklch(0.95 0.005 250);
-  --primary: oklch(0.55 0.20 255);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.26 0.03 250);
-  --secondary-foreground: oklch(0.95 0.005 250);
-  --muted: oklch(0.26 0.03 250);
-  --muted-foreground: oklch(0.65 0.02 250);
-  --accent: oklch(0.26 0.03 250);
-  --accent-foreground: oklch(0.95 0.005 250);
-  --destructive: oklch(0.65 0.20 25);
-  --border: oklch(0.30 0.03 250);
-  --input: oklch(0.30 0.03 250);
-  --ring: oklch(0.55 0.20 255);
-  --warning: oklch(0.75 0.15 75);
-  --warning-foreground: oklch(0.20 0.05 75);
-  --success: oklch(0.60 0.15 150);
-  --success-foreground: oklch(0.99 0 0);
-  --chart-1: oklch(0.55 0.20 255);
-  --chart-2: oklch(0.60 0.15 150);
-  --chart-3: oklch(0.75 0.15 75);
-  --chart-4: oklch(0.65 0.20 25);
-  --chart-5: oklch(0.60 0.15 300);
-  --sidebar: oklch(0.18 0.025 250);
-  --sidebar-foreground: oklch(0.92 0.01 250);
-  --sidebar-primary: oklch(0.55 0.20 255);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.26 0.03 250);
-  --sidebar-accent-foreground: oklch(0.92 0.01 250);
-  --sidebar-border: oklch(0.30 0.03 250);
-  --sidebar-ring: oklch(0.55 0.20 255);
+  --background: #0F1117;
+  --foreground: #F1F3F5;
+  --card: #1A1D23;
+  --card-foreground: #F1F3F5;
+  --popover: #1A1D23;
+  --popover-foreground: #F1F3F5;
+  --surface-muted: #14161C;
+  --primary: #3B82F6;
+  --primary-foreground: #FFFFFF;
+  --secondary: #2A2E35;
+  --secondary-foreground: #F1F3F5;
+  --muted: #1E2028;
+  --muted-foreground: #9AA0AB;
+  --accent: rgba(59,130,246,0.12);
+  --accent-foreground: #60A5FA;
+  --destructive: #F87171;
+  --border: #2A2E35;
+  --input: #2A2E35;
+  --ring: #3B82F6;
+  --warning: #F5A524;
+  --warning-foreground: #FEF3C7;
+  --success: #3B82F6;
+  --success-foreground: #FFFFFF;
+  --chart-1: #3B82F6;
+  --chart-2: #60A5FA;
+  --chart-3: #93C5FD;
+  --chart-4: #BFDBFE;
+  --chart-5: #DBEAFE;
+  --sidebar: #14161C;
+  --sidebar-foreground: #9AA0AB;
+  --sidebar-primary: #3B82F6;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: rgba(59,130,246,0.12);
+  --sidebar-accent-foreground: #60A5FA;
+  --sidebar-border: #2A2E35;
+  --sidebar-ring: #3B82F6;
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
 
 @layer base {
@@ -145,4 +189,43 @@
   html {
     @apply font-sans;
   }
+}
+
+/* TradoX Card System */
+.card-tradox {
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  border: none;
+  padding: 24px;
+}
+
+/* TradoX Pill Search */
+.search-pill {
+  border-radius: 999px;
+  background: var(--surface-muted);
+  border: none;
+}
+
+/* TradoX Quick Action Circle */
+.quick-action-circle {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.quick-action-circle:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  filter: brightness(0.9);
+}
+
+/* Chart gradient */
+.chart-gradient-fill {
+  fill: url(#chartGradient);
 }

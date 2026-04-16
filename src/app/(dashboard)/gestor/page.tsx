@@ -1,168 +1,203 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { StatsCards } from "@/components/dashboard/stats-cards";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
-import { Trophy, TrendingUp } from "lucide-react";
-import { mockTeamStats, mockTopModels, mockDashboardStats } from "@/lib/data/mock-data";
+import { MetricHero } from "@/components/dashboard/metric-hero";
+import { QuickActions } from "@/components/dashboard/quick-actions";
+import { AreaChart } from "@/components/dashboard/area-chart";
+import { TradoxTable } from "@/components/dashboard/tradox-table";
+import { Trophy, AlertTriangle, Lightbulb, FileDown } from "lucide-react";
 
 export default function GestorDashboard() {
   return (
-    <DashboardLayout pageTitle="Dashboard do Gestor" role="gestor" userName="Ricardo Pereira">
+    <DashboardLayout
+      role="gestor"
+      userName="Ricardo"
+      subtitle="Acompanhe a performance da sua equipe"
+    >
       <div className="space-y-6">
-        <StatsCards {...mockDashboardStats} />
-
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Team Ranking */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Trophy className="h-5 w-5 text-primary" />
-                Ranking da Equipe
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                    <TableHead>Vendedor</TableHead>
-                    <TableHead className="text-center">Desejos</TableHead>
-                    <TableHead className="text-center">Matches</TableHead>
-                    <TableHead className="text-center">Conversões</TableHead>
-                    <TableHead>Taxa</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {mockTeamStats
-                    .sort((a, b) => b.rate - a.rate)
-                    .map((s, i) => (
-                      <TableRow key={s.seller}>
-                        <TableCell>
-                          <span className={`font-bold ${i === 0 ? "text-amber-500" : i === 1 ? "text-gray-400" : i === 2 ? "text-amber-700" : "text-muted-foreground"}`}>
-                            {i + 1}
-                          </span>
-                        </TableCell>
-                        <TableCell className="font-medium">{s.seller}</TableCell>
-                        <TableCell className="text-center">{s.wishes}</TableCell>
-                        <TableCell className="text-center">{s.matches}</TableCell>
-                        <TableCell className="text-center">{s.conversions}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Progress value={s.rate} className="h-2 w-16" />
-                            <span className="text-xs font-medium">{s.rate}%</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          {/* Modelos mais procurados */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Mais Procurados
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {mockTopModels.map((item, i) => (
-                  <div key={item.model} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-muted-foreground w-5">
-                        {i + 1}.
-                      </span>
-                      <span className="text-sm font-medium">{item.model}</span>
-                    </div>
-                    <Badge variant="secondary" className="text-xs">
-                      {item.count} desejos
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 pt-4 border-t">
-                <p className="text-xs text-muted-foreground">
-                  Modelos mais buscados na sua região que você pode não ter em estoque.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Row 1 */}
+        <div className="grid gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-2 space-y-6">
+            <MetricHero
+              label="Pipeline da Equipe"
+              value="R$ 2,4M"
+              trend={{ value: 18, label: "vs. mês anterior" }}
+              subtitle="47 desejos ativos na sua rede"
+              sparklineData={[800, 1200, 1100, 1600, 1800, 2000, 2200, 2100, 2400]}
+              primaryAction={{ label: "Ver Pipeline" }}
+              secondaryAction={{ label: "Exportar" }}
+            />
+            <QuickActions
+              actions={[
+                { label: "Ranking", icon: Trophy, href: "/gestor/equipe" },
+                { label: "Oport. Perdidas", icon: AlertTriangle, href: "/gestor/relatorios" },
+                { label: "Insights", icon: Lightbulb, href: "/gestor/desejos" },
+                { label: "Exportar", icon: FileDown, href: "/gestor/relatorios" },
+              ]}
+            />
+          </div>
+          <div className="lg:col-span-3">
+            <AreaChart
+              title="Performance da Equipe"
+              subtitle="Desejos cadastrados x convertidos"
+              currentValue="47"
+              trend={{ value: 15, label: "desejos este mês" }}
+              data={[
+                { label: "Nov", value: 28 },
+                { label: "Dez", value: 35 },
+                { label: "Jan", value: 32 },
+                { label: "Fev", value: 40 },
+                { label: "Mar", value: 43 },
+                { label: "Abr", value: 47 },
+              ]}
+            />
+          </div>
         </div>
 
-        {/* Insights */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Desejos por Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {[
-                  { label: "Procurando", value: 23, total: 47, color: "bg-primary" },
-                  { label: "Match Encontrado", value: 8, total: 47, color: "bg-chart-2" },
-                  { label: "Em Negociação", value: 5, total: 47, color: "bg-chart-3" },
-                  { label: "Convertido", value: 7, total: 47, color: "bg-chart-4" },
-                  { label: "Perdido/Expirado", value: 4, total: 47, color: "bg-muted-foreground" },
-                ].map((item) => (
-                  <div key={item.label} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span>{item.label}</span>
-                      <span className="font-medium">{item.value}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${item.color}`}
-                        style={{ width: `${(item.value / item.total) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Row 2 */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <TradoxTable
+            title="Top Vendedores"
+            columns={[
+              { key: "seller", label: "Vendedor" },
+              { key: "conversions", label: "Conversões", align: "center" },
+              { key: "rate", label: "Taxa", align: "right" },
+            ]}
+            rows={[
+              {
+                id: "s2",
+                avatar: { text: "MS", color: "#2563EB" },
+                title: "Maria Santos",
+                subtitle: "15 desejos · 10 matches",
+                cells: {
+                  conversions: <span className="font-bold text-[#111827]">4</span>,
+                  rate: (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--primary)]">
+                      26.7%
+                    </span>
+                  ),
+                },
+                action: { label: "Detalhes" },
+                pinned: true,
+              },
+              {
+                id: "s1",
+                avatar: { text: "JS", color: "#3B82F6" },
+                title: "João Silva",
+                subtitle: "12 desejos · 8 matches",
+                cells: {
+                  conversions: <span className="font-bold text-[#111827]">3</span>,
+                  rate: (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--primary)]">
+                      25.0%
+                    </span>
+                  ),
+                },
+                action: { label: "Detalhes" },
+              },
+              {
+                id: "s3",
+                avatar: { text: "CO", color: "#60A5FA" },
+                title: "Carlos Oliveira",
+                subtitle: "10 desejos · 9 matches",
+                cells: {
+                  conversions: <span className="font-bold text-[#111827]">2</span>,
+                  rate: (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
+                      20.0%
+                    </span>
+                  ),
+                },
+                action: { label: "Detalhes" },
+              },
+              {
+                id: "s4",
+                avatar: { text: "AS", color: "#93C5FD" },
+                title: "Ana Souza",
+                subtitle: "10 desejos · 7 matches",
+                cells: {
+                  conversions: <span className="font-bold text-[#111827]">1</span>,
+                  rate: (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-[#E5484D]">
+                      10.0%
+                    </span>
+                  ),
+                },
+                action: { label: "Detalhes" },
+              },
+            ]}
+          />
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Matches por Mês</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-2 h-40">
-                {[
-                  { month: "Nov", value: 12 },
-                  { month: "Dez", value: 18 },
-                  { month: "Jan", value: 22 },
-                  { month: "Fev", value: 28 },
-                  { month: "Mar", value: 31 },
-                  { month: "Abr", value: 34 },
-                ].map((item) => (
-                  <div key={item.month} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full relative flex-1 flex items-end">
-                      <div
-                        className="w-full bg-primary/80 rounded-t-md transition-all hover:bg-primary"
-                        style={{ height: `${(item.value / 40) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground">{item.month}</span>
-                    <span className="text-xs font-medium">{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <TradoxTable
+            title="Modelos Mais Procurados Sem Estoque"
+            columns={[
+              { key: "model", label: "Modelo" },
+              { key: "wishes", label: "Desejos", align: "center" },
+              { key: "trend", label: "Tendência", align: "right" },
+            ]}
+            rows={[
+              {
+                id: "t1",
+                avatar: { text: "H", color: "#E40521" },
+                title: "Honda Civic",
+                subtitle: "2021–2024 · Automático",
+                cells: {
+                  wishes: <span className="font-bold text-[#111827]">8</span>,
+                  trend: (
+                    <span className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-[var(--primary)]">
+                      +3 esta semana
+                    </span>
+                  ),
+                },
+                action: { label: "Ver" },
+              },
+              {
+                id: "t2",
+                avatar: { text: "T", color: "#1A1A1A" },
+                title: "Toyota Corolla",
+                subtitle: "2020–2024 · Flex",
+                cells: {
+                  wishes: <span className="font-bold text-[#111827]">7</span>,
+                  trend: (
+                    <span className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-[var(--primary)]">
+                      +2 esta semana
+                    </span>
+                  ),
+                },
+                action: { label: "Ver" },
+              },
+              {
+                id: "t3",
+                avatar: { text: "J", color: "#3D5A1E" },
+                title: "Jeep Compass",
+                subtitle: "2020–2023 · Diesel",
+                cells: {
+                  wishes: <span className="font-bold text-[#111827]">6</span>,
+                  trend: (
+                    <span className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-[#9AA0AB]">
+                      sem alteração
+                    </span>
+                  ),
+                },
+                action: { label: "Ver" },
+              },
+              {
+                id: "t4",
+                avatar: { text: "V", color: "#001E50" },
+                title: "VW T-Cross",
+                subtitle: "2021–2024 · Automático",
+                cells: {
+                  wishes: <span className="font-bold text-[#111827]">5</span>,
+                  trend: (
+                    <span className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-[var(--primary)]">
+                      +1 esta semana
+                    </span>
+                  ),
+                },
+                action: { label: "Ver" },
+              },
+            ]}
+          />
         </div>
       </div>
     </DashboardLayout>

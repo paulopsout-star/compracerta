@@ -1,167 +1,185 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Users,
-  Building2,
-  Zap,
-  MessageCircle,
-  CheckCircle,
-  AlertCircle,
-  Clock,
-  Activity,
-  Database,
-  Wifi,
-} from "lucide-react";
-import { Progress } from "@/components/ui/progress";
+import { MetricHero } from "@/components/dashboard/metric-hero";
+import { QuickActions } from "@/components/dashboard/quick-actions";
+import { AreaChart } from "@/components/dashboard/area-chart";
+import { TradoxTable } from "@/components/dashboard/tradox-table";
+import { Users, Plug, ScrollText, Settings, CheckCircle, AlertCircle, Wifi, Database, MessageSquare, Zap } from "lucide-react";
 
 export default function AdminDashboard() {
   return (
-    <DashboardLayout pageTitle="Painel Administrativo" role="admin" userName="Admin Sistema">
+    <DashboardLayout
+      role="admin"
+      userName="Admin"
+      subtitle="Visão geral do ecossistema Compra Certa"
+    >
       <div className="space-y-6">
-        {/* Stats */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          {[
-            { title: "Usuários Ativos", value: "156", icon: Users, detail: "12 novos esta semana" },
-            { title: "Concessionárias", value: "23", icon: Building2, detail: "MG e GO" },
-            { title: "Matches Hoje", value: "47", icon: Zap, detail: "+18% vs ontem" },
-            { title: "WhatsApp Enviados", value: "234", icon: MessageCircle, detail: "89% entregues" },
-          ].map((stat) => (
-            <Card key={stat.title}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10">
-                  <stat.icon className="h-5 w-5 text-primary" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <p className="text-xs text-muted-foreground mt-1">{stat.detail}</p>
-              </CardContent>
-            </Card>
-          ))}
+        {/* Row 1 */}
+        <div className="grid gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-2 space-y-6">
+            <MetricHero
+              label="GMV Gerado"
+              value="R$ 847k"
+              trend={{ value: 42, label: "vs. mês anterior" }}
+              subtitle="Valor de negócios fechados via plataforma"
+              sparklineData={[120, 180, 250, 320, 400, 480, 550, 680, 847]}
+              primaryAction={{ label: "Relatório Completo" }}
+              secondaryAction={{ label: "Exportar" }}
+            />
+            <QuickActions
+              actions={[
+                { label: "Usuários", icon: Users, href: "/admin/usuarios" },
+                { label: "Integrações", icon: Plug, href: "/admin/integracoes" },
+                { label: "Logs", icon: ScrollText, href: "/admin/logs" },
+                { label: "Parâmetros", icon: Settings, href: "/admin/parametros" },
+              ]}
+            />
+          </div>
+          <div className="lg:col-span-3">
+            <AreaChart
+              title="Matches x Conversões"
+              subtitle="Evolução mensal da plataforma"
+              currentValue="234"
+              trend={{ value: 28, label: "matches este mês" }}
+              data={[
+                { label: "Nov", value: 85 },
+                { label: "Dez", value: 110 },
+                { label: "Jan", value: 135 },
+                { label: "Fev", value: 168 },
+                { label: "Mar", value: 195 },
+                { label: "Abr", value: 234 },
+              ]}
+            />
+          </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Status das Integrações */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Activity className="h-5 w-5 text-primary" />
-                Status das Integrações
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
+        {/* Row 2 */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Integrações */}
+          <TradoxTable
+            title="Status das Integrações"
+            columns={[
+              { key: "integration", label: "Integração" },
+              { key: "latency", label: "Latência", align: "center" },
+              { key: "status", label: "Status", align: "center" },
+            ]}
+            rows={[
+              {
+                id: "i1",
+                avatar: { text: "CR", color: "#2563EB" },
+                title: "Canal do Repasse",
+                subtitle: "Marketplace · Webhook + REST",
+                cells: {
+                  latency: <span className="text-[13px] text-[#5B6370]">45ms</span>,
+                  status: (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--primary)]">
+                      <CheckCircle className="w-3 h-3" /> Online
+                    </span>
+                  ),
+                },
+                action: { label: "Config" },
+              },
+              {
+                id: "i2",
+                avatar: { text: "AD", color: "#3B82F6" },
+                title: "Avaliador Digital",
+                subtitle: "Read Replica · CDC Sync",
+                cells: {
+                  latency: <span className="text-[13px] text-[#5B6370]">120ms</span>,
+                  status: (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--primary)]">
+                      <CheckCircle className="w-3 h-3" /> Online
+                    </span>
+                  ),
+                },
+                action: { label: "Config" },
+              },
+              {
+                id: "i3",
+                avatar: { text: "WA", color: "#25D366" },
+                title: "WhatsApp Business",
+                subtitle: "Cloud API · Templates aprovados",
+                cells: {
+                  latency: <span className="text-[13px] text-[#5B6370]">89ms</span>,
+                  status: (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--primary)]">
+                      <CheckCircle className="w-3 h-3" /> Online
+                    </span>
+                  ),
+                },
+                action: { label: "Config" },
+              },
+              {
+                id: "i4",
+                avatar: { text: "MQ", color: "#FF6600" },
+                title: "Fila de Matching",
+                subtitle: "RabbitMQ · Processamento contínuo",
+                cells: {
+                  latency: <span className="text-[13px] text-[#5B6370]">12ms</span>,
+                  status: (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--primary)]">
+                      <CheckCircle className="w-3 h-3" /> Online
+                    </span>
+                  ),
+                },
+                action: { label: "Config" },
+              },
+            ]}
+          />
+
+          {/* Métricas operacionais */}
+          <div className="space-y-6">
+            <div className="card-tradox">
+              <p className="text-[12px] font-medium text-[#9AA0AB] uppercase tracking-[0.4px] mb-4">
+                Notificações WhatsApp — 24h
+              </p>
+              <div className="space-y-3">
                 {[
-                  { name: "Canal do Repasse (Marketplace)", status: "online", latency: "45ms", lastSync: "há 2 min", icon: Wifi },
-                  { name: "Avaliador Digital (Read Replica)", status: "online", latency: "120ms", lastSync: "há 5 min", icon: Database },
-                  { name: "WhatsApp Business API", status: "online", latency: "89ms", lastSync: "há 1 min", icon: MessageCircle },
-                  { name: "Fila de Matching (RabbitMQ)", status: "online", latency: "12ms", lastSync: "contínuo", icon: Zap },
-                ].map((integration) => (
-                  <div key={integration.name} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <integration.icon className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">{integration.name}</p>
-                        <p className="text-xs text-muted-foreground">Latência: {integration.latency} · Sync: {integration.lastSync}</p>
-                      </div>
+                  { label: "Enviadas", value: 234, total: 234, color: "bg-[var(--primary)]" },
+                  { label: "Entregues", value: 208, total: 234, color: "bg-[#3B82F6]" },
+                  { label: "Lidas", value: 156, total: 234, color: "bg-[#60A5FA]" },
+                  { label: "Respondidas", value: 89, total: 234, color: "bg-[#93C5FD]" },
+                  { label: "Com erro", value: 3, total: 234, color: "bg-[#E5484D]" },
+                ].map((item) => (
+                  <div key={item.label}>
+                    <div className="flex justify-between text-[13px] mb-1">
+                      <span className="text-[#5B6370]">{item.label}</span>
+                      <span className="font-semibold text-[#111827]">
+                        {item.value} ({Math.round((item.value / item.total) * 100)}%)
+                      </span>
                     </div>
-                    <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                      <CheckCircle className="mr-1 h-3 w-3" />
-                      Online
-                    </Badge>
+                    <div className="h-[6px] rounded-full bg-[#F1F3F5] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${item.color}`}
+                        style={{ width: `${(item.value / item.total) * 100}%` }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Métricas de Notificação */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Notificações WhatsApp</CardTitle>
-              <CardDescription>Últimas 24 horas</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {[
-                { label: "Enviadas", value: 234, total: 234, color: "bg-blue-500" },
-                { label: "Entregues", value: 208, total: 234, color: "bg-green-500" },
-                { label: "Lidas", value: 156, total: 234, color: "bg-emerald-500" },
-                { label: "Respondidas", value: 89, total: 234, color: "bg-primary" },
-                { label: "Com erro", value: 3, total: 234, color: "bg-destructive" },
-              ].map((item) => (
-                <div key={item.label} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span>{item.label}</span>
-                    <span className="font-medium">{item.value} ({Math.round((item.value / item.total) * 100)}%)</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${item.color}`}
-                      style={{ width: `${(item.value / item.total) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Logs recentes */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Logs de Atividade Recentes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Hora</TableHead>
-                  <TableHead>Ação</TableHead>
-                  <TableHead>Usuário</TableHead>
-                  <TableHead className="hidden md:table-cell">Entidade</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <div className="card-tradox">
+              <p className="text-[12px] font-medium text-[#9AA0AB] uppercase tracking-[0.4px] mb-3">
+                Métricas Gerais
+              </p>
+              <div className="grid grid-cols-2 gap-4">
                 {[
-                  { time: "16:42", action: "Desejo criado", user: "João Silva", entity: "Wish #w129", status: "success" },
-                  { time: "16:38", action: "Match encontrado", user: "Sistema", entity: "Match #m87", status: "success" },
-                  { time: "16:35", action: "WhatsApp enviado", user: "Sistema", entity: "Notif #n201", status: "success" },
-                  { time: "16:30", action: "Upload de estoque", user: "Auto Center BH", entity: "Upload #su45", status: "success" },
-                  { time: "16:22", action: "Falha no envio WhatsApp", user: "Sistema", entity: "Notif #n200", status: "error" },
-                  { time: "16:15", action: "Novo usuário cadastrado", user: "Admin", entity: "User #u157", status: "success" },
-                  { time: "16:10", action: "Sync Avaliador Digital", user: "CDC Worker", entity: "Offer batch #89", status: "success" },
-                ].map((log, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="text-xs text-muted-foreground">{log.time}</TableCell>
-                    <TableCell className="text-sm font-medium">{log.action}</TableCell>
-                    <TableCell className="text-sm">{log.user}</TableCell>
-                    <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{log.entity}</TableCell>
-                    <TableCell>
-                      {log.status === "success" ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4 text-destructive" />
-                      )}
-                    </TableCell>
-                  </TableRow>
+                  { label: "Usuários Ativos", value: "156" },
+                  { label: "Concessionárias", value: "23" },
+                  { label: "Lojistas", value: "45" },
+                  { label: "Matches Hoje", value: "47" },
+                ].map((item) => (
+                  <div key={item.label}>
+                    <p className="text-[11px] text-[#9AA0AB] uppercase tracking-[0.3px]">{item.label}</p>
+                    <p className="text-[20px] font-bold text-[#111827] mt-0.5">{item.value}</p>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

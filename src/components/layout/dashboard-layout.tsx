@@ -7,41 +7,46 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
-  pageTitle: string;
   role?: UserRole;
   userName?: string;
+  greeting?: string;
+  subtitle?: string;
 }
 
 export function DashboardLayout({
   children,
-  pageTitle,
   role = "vendedor",
-  userName = "João Silva",
+  userName = "João",
+  greeting,
+  subtitle,
 }: DashboardLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex md:flex-col md:w-64 md:shrink-0">
-        <Sidebar role={role} userName={userName} />
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* Desktop sidebar — fixed 240px */}
+      <div className="hidden md:flex md:flex-col md:w-[240px] md:shrink-0">
+        <Sidebar role={role} />
       </div>
 
       {/* Mobile sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="p-0 w-64">
-          <Sidebar role={role} userName={userName} />
+        <SheetContent side="left" className="p-0 w-[240px]">
+          <Sidebar role={role} />
         </SheetContent>
       </Sheet>
 
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header
-          pageTitle={pageTitle}
-          onMenuToggle={() => setMobileOpen(true)}
           userName={userName}
+          greeting={greeting}
+          subtitle={subtitle}
+          onMenuToggle={() => setMobileOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto px-4 md:px-8 pb-8">
+          {children}
+        </main>
       </div>
     </div>
   );
