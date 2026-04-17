@@ -46,9 +46,11 @@ function cacheKey(params: Record<string, string | number | undefined>): string {
   );
 }
 
-function vehicleToOffer(v: AvaliadorVehicle, index: number): Offer {
-  // API doesn't return id — synthesize a stable id from core fields
-  const syntheticId = `${v.marca}-${v.modelo}-${v.km}-${v.ano_modelo}-${v.cidade}-${v.uf}-${index}`
+function vehicleToOffer(v: AvaliadorVehicle, _index: number): Offer {
+  // API doesn't return id — synthesize a stable id from core fields.
+  // IMPORTANT: do NOT include array index — it changes between queries
+  // and causes the same vehicle to be duplicated in our DB.
+  const syntheticId = `${v.marca}-${v.modelo}-${v.km}-${v.ano_modelo}-${v.cidade}-${v.uf}`
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "");
 
