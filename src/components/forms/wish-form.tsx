@@ -1,13 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { wishSchema, type WishFormData } from "@/lib/validators/wish";
 import {
-  BRANDS,
-  MODELS_BY_BRAND,
   BRAZILIAN_STATES,
   CAR_COLORS,
   TRANSMISSION_OPTIONS,
@@ -15,6 +13,7 @@ import {
   URGENCY_OPTIONS,
   VALIDITY_OPTIONS,
 } from "@/lib/data/fipe-mock";
+import { SearchableSelect, type SearchableOption } from "@/components/forms/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,7 +36,30 @@ interface WishFormProps {
 
 export function WishForm({ onSubmit }: WishFormProps) {
   const [loading, setLoading] = useState(false);
-  const [selectedBrand, setSelectedBrand] = useState<string>("");
+  const [brands, setBrands] = useState<SearchableOption[]>([]);
+  const [brandsLoading, setBrandsLoading] = useState(true);
+  const [models, setModels] = useState<SearchableOption[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [selectedBrandCode, setSelectedBrandCode] = useState<string>("");
+  const [selectedModelCode, setSelectedModelCode] = useState<string>("");
+
+  // Load brands on mount
+  useEffect(() => {
+    fetch("/api/fipe/marcas")
+      .then((r) => r.json())
+      .then((d) => setBrands(d.data ?? []))
+      .finally(() => setBrandsLoading(false));
+  }, []);
+
+  // Load models when brand changes
+  useEffect(() => {
+    if (!selectedBrandCode) { setModels([]); return; }
+    setModelsLoading(true);
+    fetch(`/api/fipe/modelos/${selectedBrandCode}`)
+      .then((r) => r.json())
+      .then((d) => setModels(d.data ?? []))
+      .finally(() => setModelsLoading(false));
+  }, [selectedBrandCode]);
 
   const {
     register,
@@ -77,8 +99,6 @@ export function WishForm({ onSubmit }: WishFormProps) {
       setLoading(false);
     }
   };
-
-  const models = selectedBrand ? (MODELS_BY_BRAND[selectedBrand] ?? []) : [];
 
   function toggleColor(color: string) {
     const current = watchedColors;
@@ -138,40 +158,38 @@ export function WishForm({ onSubmit }: WishFormProps) {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>Marca *</Label>
-            <Select
-              onValueChange={(v) => {
-                const val = v as string;
-                setSelectedBrand(val);
-                setValue("brand", BRANDS.find((b) => b.value === val)?.label ?? val);
+            <Label htmlFor="brand-select">Marca *</Label>
+            <SearchableSelect
+              id="brand-select"
+              options={brands}
+              value={selectedBrandCode}
+              loading={brandsLoading}
+              placeholder="Selecione a marca"
+              emptyMessage="Marca não encontrada"
+              onChange={(opt) => {
+                setSelectedBrandCode(opt.value);
+                setSelectedModelCode("");
+                setValue("brand", opt.label);
                 setValue("model", "");
               }}
-            >
-              <SelectTrigger><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
-              <SelectContent>
-                {BRANDS.map((b) => (
-                  <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
             {errors.brand && <p className="text-xs text-destructive">{errors.brand.message}</p>}
           </div>
           <div className="space-y-2">
-            <Label>Modelo *</Label>
-            <Select
-              disabled={!selectedBrand}
-              onValueChange={(v) => {
-                const val = v as string;
-                setValue("model", models.find((m) => m.value === val)?.label ?? val);
+            <Label htmlFor="model-select">Modelo *</Label>
+            <SearchableSelect
+              id="model-select"
+              options={models}
+              value={selectedModelCode}
+              loading={modelsLoading}
+              disabled={!selectedBrandCode || modelsLoading}
+              placeholder={selectedBrandCode ? "Selecione o modelo" : "Selecione a marca primeiro"}
+              emptyMessage="Modelo não encontrado"
+              onChange={(opt) => {
+                setSelectedModelCode(opt.value);
+                setValue("model", opt.label);
               }}
-            >
-              <SelectTrigger><SelectValue placeholder={selectedBrand ? "Selecione o modelo" : "Selecione a marca primeiro"} /></SelectTrigger>
-              <SelectContent>
-                {models.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
             {errors.model && <p className="text-xs text-destructive">{errors.model.message}</p>}
           </div>
           <div className="space-y-2 sm:col-span-2">
