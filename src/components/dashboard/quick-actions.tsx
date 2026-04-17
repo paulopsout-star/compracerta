@@ -17,20 +17,20 @@ interface QuickActionsProps {
 export function QuickActions({ actions, className }: QuickActionsProps) {
   return (
     <div className={cn("card-tradox", className)}>
-      <p className="text-[12px] font-medium text-[#9AA0AB] uppercase tracking-[0.4px] mb-5">
+      <p className="text-[11px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] mb-4">
         Ações Rápidas
       </p>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-3">
         {actions.map((action) => (
           <Link
             key={action.href}
             href={action.href}
-            className="flex flex-col items-center gap-2.5 group"
+            className="flex flex-col items-center gap-2 group"
           >
-            <div className="quick-action-circle group-hover:shadow-md">
+            <div className="quick-action-circle group-hover:shadow-lg group-hover:shadow-[var(--primary)]/15 active:scale-95">
               <action.icon className="w-5 h-5" />
             </div>
-            <span className="text-[12px] font-medium text-[#5B6370] text-center leading-tight group-hover:text-[#111827] transition-colors">
+            <span className="text-[11px] font-medium text-[#6B7280] text-center leading-tight group-hover:text-[#111827] transition-colors">
               {action.label}
             </span>
           </Link>

@@ -63,17 +63,17 @@ export function AreaChart({
   return (
     <div className={cn("card-tradox", className)}>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <button className="flex items-center gap-1.5 text-[14px] font-semibold text-[#111827] hover:text-[var(--primary)] transition-colors">
+      <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
+        <div className="min-w-0">
+          <button className="flex items-center gap-1.5 text-[13px] font-semibold text-[#111827] hover:text-[var(--primary)] transition-colors">
             {title}
-            <ChevronDown className="w-4 h-4 text-[#9AA0AB]" />
+            <ChevronDown className="w-3.5 h-3.5 text-[#B0B7C3]" />
           </button>
           {subtitle && (
-            <p className="text-[12px] text-[#9AA0AB] mt-0.5">{subtitle}</p>
+            <p className="text-[11px] text-[#B0B7C3] mt-0.5">{subtitle}</p>
           )}
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[28px] font-bold text-[#111827]">{currentValue}</span>
+          <div className="flex items-baseline gap-2 mt-2">
+            <span className="text-[26px] font-bold text-[#111827] tabular-nums">{currentValue}</span>
             <span
               className={cn(
                 "inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[12px] font-semibold",
