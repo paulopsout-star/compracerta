@@ -101,6 +101,7 @@ export async function POST() {
             city: offer.city,
             state: offer.state,
             active: true,
+            external_status: offer.externalStatus ?? null,
             synced_at: new Date(offer.syncedAt).toISOString(),
           }, { onConflict: "source,source_id" }).select("id").single();
           if (upserted) offerId = upserted.id as string;

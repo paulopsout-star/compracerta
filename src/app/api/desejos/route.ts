@@ -177,7 +177,8 @@ export async function POST(request: NextRequest) {
                 city: offer.city,
                 state: offer.state,
                 active: true,
-                synced_at: new Date().toISOString(),
+                external_status: offer.externalStatus ?? null,
+                synced_at: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : new Date().toISOString(),
               },
               { onConflict: "source,source_id" }
             )

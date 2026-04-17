@@ -10,10 +10,15 @@ function fmt(v: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
 }
 
-const SOURCE_LABEL: Record<string, { label: string; cls: string }> = {
-  marketplace: { label: "Marketplace", cls: "bg-purple-50 text-purple-700" },
-  avaliador: { label: "Avaliador", cls: "bg-blue-50 text-blue-700" },
-  estoque_lojista: { label: "Lojista", cls: "bg-green-50 text-green-700" },
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
+
+const STATUS_CLS: Record<string, string> = {
+  Avaliado: "bg-[rgba(37,99,235,0.1)] text-[#2563EB]",
+  Publicado: "bg-green-50 text-green-700",
+  Pendente: "bg-amber-50 text-amber-700",
+  Comprado: "bg-purple-50 text-purple-700",
 };
 
 function scoreCls(score: number) {
@@ -47,9 +52,9 @@ function MatchesContent() {
 
   function clearFilter() { router.push("/vendedor/matches"); }
 
-  // Soma fixa: 56 + 92 + 56 + 86 + 104 + 96 + 140 = 630
-  // + veiculo min 140 + gaps + padding = ~836 (cabe em lg >=1024)
-  const gridTemplate = "minmax(140px, 1fr) 56px 92px 56px 86px 104px 96px 140px";
+  // Soma fixa: 56 + 92 + 56 + 82 + 62 + 100 + 90 + 130 = 668
+  // + veiculo min 140 + gaps + padding = ~856
+  const gridTemplate = "minmax(140px, 1fr) 56px 92px 56px 82px 62px 100px 90px 130px";
 
   return (
     <DashboardLayout role="vendedor" subtitle={subtitle}>
@@ -117,9 +122,10 @@ function MatchesContent() {
               >
                 <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Veículo</span>
                 <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Score</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Origem</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Status</span>
                 <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Ano</span>
                 <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">KM</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Data aval.</span>
                 <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Localização</span>
                 <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">Preço</span>
                 <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">Ações</span>
@@ -133,7 +139,9 @@ function MatchesContent() {
                   if (!offer || !wish) return null;
 
                   const score = m.score as number;
-                  const src = SOURCE_LABEL[offer.source as string] ?? SOURCE_LABEL.marketplace;
+                  const externalStatus = offer.external_status as string | null;
+                  const statusCls = externalStatus ? (STATUS_CLS[externalStatus] ?? "bg-gray-100 text-gray-600") : "bg-gray-100 text-gray-500";
+                  const syncedAt = offer.synced_at as string | undefined;
 
                   return (
                     <div
@@ -141,13 +149,13 @@ function MatchesContent() {
                       className="grid gap-1.5 px-3 items-center min-h-[60px] hover:bg-[#FAFBFC] transition-colors w-full max-w-full"
                       style={{ gridTemplateColumns: gridTemplate }}
                     >
-                      {/* Veículo (+ cliente como subtexto) */}
+                      {/* Veículo (+ versão como subtexto, SEM "Para cliente") */}
                       <div className="min-w-0 overflow-hidden">
-                        <p className="text-[13px] font-semibold text-[#111827] leading-tight truncate" title={`${offer.brand} ${offer.model}${offer.version ? " · " + offer.version : ""}`}>
+                        <p className="text-[13px] font-semibold text-[#111827] leading-tight truncate" title={`${offer.brand} ${offer.model}`}>
                           {offer.brand as string} {offer.model as string}
                         </p>
-                        <p className="text-[11px] text-[#9AA0AB] leading-tight mt-0.5 truncate">
-                          {offer.version ? <>{offer.version as string} · </> : null}Para {wish.client_name as string}
+                        <p className="text-[11px] text-[#9AA0AB] leading-tight mt-0.5 truncate" title={(offer.version as string) || undefined}>
+                          {offer.version ? (offer.version as string) : "—"}
                         </p>
                       </div>
 
@@ -158,10 +166,10 @@ function MatchesContent() {
                         </span>
                       </div>
 
-                      {/* Origem */}
-                      <div className="min-w-0 overflow-hidden">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${src.cls}`}>
-                          {src.label}
+                      {/* Status (do Avaliador Digital) */}
+                      <div className="flex items-center justify-center min-w-0 overflow-hidden">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${statusCls}`}>
+                          {externalStatus ?? "—"}
                         </span>
                       </div>
 
@@ -173,6 +181,11 @@ function MatchesContent() {
                       {/* KM */}
                       <div className="text-right text-[11px] text-[#5B6370] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
                         {((offer.km as number) ?? 0).toLocaleString("pt-BR")} km
+                      </div>
+
+                      {/* Data avaliação */}
+                      <div className="text-[11px] text-[#5B6370] tabular-nums whitespace-nowrap text-center overflow-hidden text-ellipsis">
+                        {syncedAt ? formatDate(syncedAt) : "—"}
                       </div>
 
                       {/* Localização */}
@@ -211,34 +224,32 @@ function MatchesContent() {
                   const wish = m.wishes as Record<string, unknown> | undefined;
                   if (!offer || !wish) return null;
                   const score = m.score as number;
-                  const src = SOURCE_LABEL[offer.source as string] ?? SOURCE_LABEL.marketplace;
+                  const externalStatus = offer.external_status as string | null;
+                  const statusCls = externalStatus ? (STATUS_CLS[externalStatus] ?? "bg-gray-100 text-gray-600") : "";
+                  const syncedAt = offer.synced_at as string | undefined;
 
                   return (
                     <div key={m.id as string} className="p-4">
-                      {/* Top: badges */}
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${scoreCls(score)}`}>{score}%</span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${src.cls}`}>{src.label}</span>
+                        {externalStatus && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>{externalStatus}</span>
+                        )}
                       </div>
-
-                      {/* Vehicle */}
                       <p className="text-[15px] font-semibold text-[#111827] truncate">{offer.brand as string} {offer.model as string}</p>
-                      <p className="text-[12px] text-[#9AA0AB] truncate">
-                        {offer.version ? <>{offer.version as string} · </> : null}
+                      {offer.version ? (
+                        <p className="text-[12px] text-[#9AA0AB] truncate">{offer.version as string}</p>
+                      ) : null}
+                      <p className="text-[12px] text-[#9AA0AB] truncate mt-1">
                         {offer.year as number} · {((offer.km as number) ?? 0).toLocaleString("pt-BR")} km
+                        {syncedAt ? ` · avaliado em ${formatDate(syncedAt)}` : ""}
                       </p>
-
-                      {/* Price + location */}
                       <div className="flex items-center justify-between gap-3 mt-2 flex-wrap">
                         <p className="text-[16px] font-bold text-[#2563EB] tabular-nums">{fmt(offer.price as number)}</p>
                         <div className="flex items-center gap-1 text-[11px] text-[#9AA0AB]">
                           <MapPin className="w-3 h-3" />{offer.city as string}/{offer.state as string}
                         </div>
                       </div>
-
-                      <p className="text-[11px] text-[#9AA0AB] mt-1.5">Para {wish.client_name as string}</p>
-
-                      {/* Actions */}
                       <div className="flex gap-2 mt-3">
                         <button className="flex-1 h-[34px] rounded-[8px] bg-[#2563EB] text-white text-[12px] font-semibold hover:brightness-90 transition-all">
                           Contatar
