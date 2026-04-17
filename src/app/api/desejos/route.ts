@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
 import { wishSchema } from "@/lib/validators/wish";
+import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
+import { fetchExternalOffersForWish } from "@/lib/services/avaliador-api";
+import type { Wish, Offer } from "@/types";
+
+interface ImmediateMatch {
+  score: number;
+  offer: {
+    brand: string;
+    model: string;
+    version?: string;
+    year: number;
+    km: number;
+    color?: string;
+    price: number;
+    city: string;
+    state: string;
+    source: string;
+  };
+}
 
 // POST /api/desejos — Create a new wish
 export async function POST(request: NextRequest) {
@@ -25,7 +44,7 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + data.validityDays);
 
-    const wish = await insert("wishes", {
+    const wishRow = (await insert("wishes", {
       seller_id: session.user.id,
       dealership_id: (session.user as Record<string, unknown>).dealershipId ?? null,
       client_name: data.clientName,
@@ -52,10 +71,141 @@ export async function POST(request: NextRequest) {
       lgpd_consent: data.lgpdConsent,
       status: "procurando",
       expires_at: expiresAt.toISOString(),
-    });
+    })) as Record<string, unknown>;
+
+    // Run immediate matching — so the user sees results instantly
+    const wish: Wish = {
+      id: wishRow.id as string,
+      sellerId: wishRow.seller_id as string,
+      clientName: data.clientName,
+      clientPhone: data.clientPhone,
+      brand: data.brand,
+      model: data.model,
+      version: data.version,
+      yearMin: data.yearMin,
+      yearMax: data.yearMax,
+      kmMax: data.kmMax,
+      priceMin: data.priceMin,
+      priceMax: data.priceMax,
+      colors: data.colors,
+      transmission: data.transmission,
+      fuel: data.fuel,
+      cityRef: data.cityRef,
+      stateRef: data.stateRef,
+      radiusKm: data.radiusKm,
+      urgency: data.urgency,
+      validityDays: data.validityDays,
+      lgpdConsent: data.lgpdConsent,
+      status: "procurando",
+      createdAt: new Date(),
+      expiresAt,
+    };
+
+    const immediateMatches: ImmediateMatch[] = [];
+    try {
+      // Fetch local offers (lojistas) + external (Avaliador Digital)
+      const { data: localOffers } = await supabase.from("offers").select("*").eq("active", true);
+      const external = await fetchExternalOffersForWish(wish);
+
+      const allOffers: Offer[] = [
+        ...((localOffers ?? []).map((r: Record<string, unknown>): Offer => ({
+          id: r.id as string,
+          source: r.source as Offer["source"],
+          sourceId: r.source_id as string,
+          plate: r.plate as string | undefined,
+          brand: r.brand as string,
+          model: r.model as string,
+          version: r.version as string | undefined,
+          year: r.year as number,
+          km: r.km as number,
+          color: r.color as string | undefined,
+          price: r.price as number,
+          city: r.city as string,
+          state: r.state as string,
+          active: r.active as boolean,
+          syncedAt: new Date(r.synced_at as string),
+        }))),
+        ...external,
+      ];
+
+      // Score every offer, keep only relevant matches
+      for (const offer of allOffers) {
+        const result = calculateMatchScore(wish, offer);
+        if (result.score < MATCH_THRESHOLDS.SUGGESTION) continue;
+
+        immediateMatches.push({
+          score: result.score,
+          offer: {
+            brand: offer.brand,
+            model: offer.model,
+            version: offer.version,
+            year: offer.year,
+            km: offer.km,
+            color: offer.color,
+            price: offer.price,
+            city: offer.city,
+            state: offer.state,
+            source: offer.source,
+          },
+        });
+
+        // Persist external offers and create match records (FK integrity)
+        let offerId = offer.id;
+        if (offer.source !== "estoque_lojista") {
+          const { data: upserted } = await supabase
+            .from("offers")
+            .upsert(
+              {
+                source: offer.source,
+                source_id: offer.sourceId,
+                plate: offer.plate ?? null,
+                brand: offer.brand,
+                model: offer.model,
+                version: offer.version ?? null,
+                year: offer.year,
+                km: offer.km,
+                color: offer.color ?? null,
+                price: offer.price,
+                city: offer.city,
+                state: offer.state,
+                active: true,
+                synced_at: new Date().toISOString(),
+              },
+              { onConflict: "source,source_id" }
+            )
+            .select("id")
+            .single();
+          if (upserted) offerId = upserted.id as string;
+        }
+
+        const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
+        await supabase.from("matches").upsert(
+          { wish_id: wish.id, offer_id: offerId, score: result.score, status: matchStatus },
+          { onConflict: "wish_id,offer_id" }
+        );
+      }
+
+      // Sort by score descending
+      immediateMatches.sort((a, b) => b.score - a.score);
+
+      // If we found any match, update wish status
+      if (immediateMatches.length > 0) {
+        await supabase
+          .from("wishes")
+          .update({ status: "match_encontrado", updated_at: new Date().toISOString() })
+          .eq("id", wish.id);
+      }
+    } catch (matchError) {
+      console.error("[API] Immediate match error (wish still saved):", matchError);
+    }
 
     return NextResponse.json(
-      { message: "Desejo cadastrado com sucesso", wish },
+      {
+        message: "Desejo cadastrado com sucesso",
+        wish: wishRow,
+        immediateMatches: immediateMatches.slice(0, 10),
+        matchesFound: immediateMatches.length,
+      },
       { status: 201 }
     );
   } catch (error) {
