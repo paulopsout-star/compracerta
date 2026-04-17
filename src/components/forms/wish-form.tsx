@@ -34,16 +34,18 @@ import { User, Car, SlidersHorizontal, Settings2, Loader2 } from "lucide-react";
 
 interface WishFormProps {
   onSubmit?: (data: WishFormData) => Promise<void> | void;
+  initialData?: Partial<WishFormData>;
+  submitLabel?: string;
 }
 
-export function WishForm({ onSubmit }: WishFormProps) {
+export function WishForm({ onSubmit, initialData, submitLabel }: WishFormProps) {
   const [loading, setLoading] = useState(false);
   const [brands, setBrands] = useState<SearchableOption[]>([]);
   const [brandsLoading, setBrandsLoading] = useState(true);
   const [fipeModels, setFipeModels] = useState<{ value: string; label: string; fipeCode: string }[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selectedBrandCode, setSelectedBrandCode] = useState<string>("");
-  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>(initialData?.model ?? "");
   const [selectedVersionCode, setSelectedVersionCode] = useState<string>("");
 
   // Derived: base models and versions grouped
@@ -99,8 +101,19 @@ export function WishForm({ onSubmit }: WishFormProps) {
       radiusKm: 100,
       colors: [],
       lgpdConsent: false,
+      ...initialData,
     },
   });
+
+  // When brands load and we have initial data, find the matching brand code
+  useEffect(() => {
+    if (initialData?.brand && brands.length > 0 && !selectedBrandCode) {
+      const match = brands.find(
+        (b) => b.label.toLowerCase() === initialData.brand!.toLowerCase()
+      );
+      if (match) setSelectedBrandCode(match.value);
+    }
+  }, [brands, initialData?.brand, selectedBrandCode]);
 
   const watchedColors = watch("colors") ?? [];
 
@@ -112,11 +125,11 @@ export function WishForm({ onSubmit }: WishFormProps) {
       } else {
         console.log("Wish submitted:", data);
       }
-      toast.success("Desejo cadastrado com sucesso!", {
+      toast.success(initialData ? "Desejo atualizado!" : "Desejo cadastrado com sucesso!", {
         description: `${data.brand} ${data.model} para ${data.clientName}`,
       });
     } catch {
-      toast.error("Erro ao cadastrar desejo. Tente novamente.");
+      toast.error(initialData ? "Erro ao atualizar. Tente novamente." : "Erro ao cadastrar desejo. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -452,7 +465,7 @@ export function WishForm({ onSubmit }: WishFormProps) {
 
           <Button type="submit" className="w-full sm:w-auto" size="lg" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Cadastrar Desejo
+            {submitLabel ?? "Cadastrar Desejo"}
           </Button>
         </CardContent>
       </Card>

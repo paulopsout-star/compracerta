@@ -5,22 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { WishForm } from "@/components/forms/wish-form";
-import { CheckCircle2, Zap, MapPin, Sparkles, PlusCircle, ArrowRight } from "lucide-react";
+import { CheckCircle2, Zap, MapPin, Sparkles, PlusCircle, ArrowRight, Pencil } from "lucide-react";
 import type { WishFormData } from "@/lib/validators/wish";
 
 interface ImmediateMatch {
   score: number;
   offer: {
-    brand: string;
-    model: string;
-    version?: string;
-    year: number;
-    km: number;
-    color?: string;
-    price: number;
-    city: string;
-    state: string;
-    source: string;
+    brand: string; model: string; version?: string; year: number; km: number;
+    color?: string; price: number; city: string; state: string; source: string;
   };
 }
 
@@ -41,33 +33,90 @@ function scoreColor(score: number) {
   return "bg-gray-100 text-gray-600";
 }
 
+type Mode =
+  | { kind: "form" }
+  | { kind: "result"; matches: ImmediateMatch[]; wishId: string; lastData: WishFormData }
+  | { kind: "edit"; wishId: string; data: WishFormData };
+
 export default function NovoDesejoPage() {
   const router = useRouter();
-  const [matches, setMatches] = useState<ImmediateMatch[] | null>(null);
-  const [wishBrand, setWishBrand] = useState("");
-  const [wishModel, setWishModel] = useState("");
+  const [mode, setMode] = useState<Mode>({ kind: "form" });
 
-  async function handleSubmit(data: WishFormData) {
+  async function handleCreate(data: WishFormData) {
     const res = await fetch("/api/desejos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error ?? "Erro ao cadastrar desejo");
     }
-
     const body = await res.json();
-    setWishBrand(data.brand);
-    setWishModel(data.model);
-    setMatches(body.immediateMatches ?? []);
+    setMode({
+      kind: "result",
+      matches: body.immediateMatches ?? [],
+      wishId: body.wish.id,
+      lastData: data,
+    });
   }
 
-  // Success screen with immediate matches
-  if (matches !== null) {
+  function makeEditHandler(wishId: string) {
+    return async (data: WishFormData) => {
+      const res = await fetch(`/api/desejos/${wishId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Erro ao atualizar desejo");
+      }
+      const body = await res.json();
+      setMode({
+        kind: "result",
+        matches: body.immediateMatches ?? [],
+        wishId,
+        lastData: data,
+      });
+    };
+  }
+
+  // ─── Modo edição ───
+  if (mode.kind === "edit") {
+    const editSubmit = makeEditHandler(mode.wishId);
+    return (
+      <DashboardLayout role="vendedor" subtitle="Editar o desejo cadastrado">
+        <div className="max-w-3xl mx-auto">
+          <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-[20px] font-semibold text-[#111827] mb-2">Editar Desejo</h2>
+              <p className="text-[14px] text-[#5B6370]">
+                Ao salvar, o matching será refeito com os novos critérios.
+              </p>
+            </div>
+            <button
+              onClick={() => setMode({ kind: "result", matches: [], wishId: mode.wishId, lastData: mode.data })}
+              className="text-[13px] text-[#5B6370] hover:text-[#111827] transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+          <WishForm
+            onSubmit={editSubmit}
+            initialData={mode.data}
+            submitLabel="Salvar alterações"
+          />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ─── Tela de resultado ───
+  if (mode.kind === "result") {
+    const { matches, wishId, lastData } = mode;
     const hasMatches = matches.length > 0;
+
     return (
       <DashboardLayout role="vendedor" subtitle="Resultado do cadastro">
         <div className="max-w-3xl mx-auto space-y-6">
@@ -84,13 +133,13 @@ export default function NovoDesejoPage() {
               <div className="flex-1 min-w-0">
                 <h2 className="text-[18px] font-bold text-[#111827]">
                   {hasMatches
-                    ? `${matches.length} match${matches.length === 1 ? "" : "es"} encontrado${matches.length === 1 ? "" : "s"} já no cadastro!`
-                    : "Desejo cadastrado com sucesso"}
+                    ? `${matches.length} match${matches.length === 1 ? "" : "es"} encontrado${matches.length === 1 ? "" : "s"}!`
+                    : "Desejo salvo"}
                 </h2>
                 <p className="text-[14px] text-[#5B6370] mt-1">
                   {hasMatches
-                    ? `Encontramos ${wishBrand} ${wishModel} na rede agora mesmo. Confira abaixo.`
-                    : `Ainda não há ${wishBrand} ${wishModel} na rede. Vamos notificar você assim que aparecer.`}
+                    ? `Encontramos ${lastData.brand} ${lastData.model} na rede. Confira abaixo.`
+                    : `Ainda não há ${lastData.brand} ${lastData.model} disponível. Vamos notificar você quando aparecer.`}
                 </p>
               </div>
             </div>
@@ -152,7 +201,7 @@ export default function NovoDesejoPage() {
             </div>
           )}
 
-          {/* Empty state for no matches */}
+          {/* Empty state */}
           {!hasMatches && (
             <div className="card-tradox text-center py-10">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#F7F8FA] mb-4">
@@ -162,23 +211,33 @@ export default function NovoDesejoPage() {
                 O motor de matching continua rodando em segundo plano. Você receberá uma notificação
                 assim que um veículo compatível for detectado no Avaliador Digital, Marketplace ou no estoque de lojistas.
               </p>
+              <p className="text-[13px] text-[#9AA0AB] mt-3">
+                Dica: ampliar a faixa de ano ou km pode gerar mais resultados.
+              </p>
             </div>
           )}
 
           {/* Actions */}
           <div className="flex gap-3 flex-wrap">
             <button
-              onClick={() => { setMatches(null); setWishBrand(""); setWishModel(""); }}
+              onClick={() => setMode({ kind: "edit", wishId, data: lastData })}
+              className="h-[44px] px-5 rounded-[10px] bg-[#2563EB] text-white text-[14px] font-medium hover:bg-[#1D4ED8] transition-all inline-flex items-center gap-2"
+            >
+              <Pencil className="w-4 h-4" />
+              Editar desejo
+            </button>
+            <button
+              onClick={() => setMode({ kind: "form" })}
               className="h-[44px] px-5 rounded-[10px] border border-[#E8EAEE] text-[14px] font-medium text-[#5B6370] hover:border-[#2563EB] hover:text-[#2563EB] transition-all inline-flex items-center gap-2"
             >
               <PlusCircle className="w-4 h-4" />
-              Cadastrar outro desejo
+              Cadastrar outro
             </button>
             <Link
               href="/vendedor/desejos"
-              className="h-[44px] px-5 rounded-[10px] bg-[#2563EB] text-white text-[14px] font-medium hover:bg-[#1D4ED8] transition-all inline-flex items-center gap-2"
+              className="h-[44px] px-5 rounded-[10px] border border-[#E8EAEE] text-[14px] font-medium text-[#5B6370] hover:border-[#2563EB] hover:text-[#2563EB] transition-all inline-flex items-center gap-2"
             >
-              Ver meus desejos <ArrowRight className="w-4 h-4" />
+              Meus desejos <ArrowRight className="w-4 h-4" />
             </Link>
             {hasMatches && (
               <button
@@ -195,7 +254,7 @@ export default function NovoDesejoPage() {
     );
   }
 
-  // Form
+  // ─── Modo formulário (novo) ───
   return (
     <DashboardLayout role="vendedor" subtitle="Cadastre o veículo que seu cliente procura">
       <div className="max-w-3xl mx-auto">
@@ -205,7 +264,7 @@ export default function NovoDesejoPage() {
             Ao cadastrar, o sistema já varre as bases do ecossistema e mostra aqui mesmo se há veículos compatíveis.
           </p>
         </div>
-        <WishForm onSubmit={handleSubmit} />
+        <WishForm onSubmit={handleCreate} />
       </div>
     </DashboardLayout>
   );
