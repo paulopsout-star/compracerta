@@ -1,41 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Plug, CheckCircle, XCircle, Clock, Wifi, Database, MessageSquare, Zap, Loader2 } from "lucide-react";
+import { Plug, CheckCircle, Clock, Wifi, Database, MessageSquare, Zap } from "lucide-react";
 
-interface IntegrationStatus {
-  name: string;
-  status: "online" | "desabilitado" | "erro";
-  latency: number | null;
-  message: string | null;
-}
-
-const META: Record<string, { label: string; desc: string; icon: typeof Wifi }> = {
-  canal_repasse: { label: "Canal do Repasse (Marketplace)", desc: "SQL Server read-only · anúncios ativos", icon: Wifi },
-  avaliador: { label: "Avaliador Digital", desc: "SQL Server read-only · veículos em avaliação", icon: Database },
-  whatsapp: { label: "WhatsApp Business API", desc: "Meta Cloud API · templates aprovados", icon: MessageSquare },
-};
-
-const STATUS_STYLE: Record<string, { bg: string; text: string; icon: typeof CheckCircle; label: string }> = {
-  online: { bg: "bg-[rgba(37,99,235,0.1)]", text: "text-[#2563EB]", icon: CheckCircle, label: "Online" },
-  desabilitado: { bg: "bg-amber-50", text: "text-amber-700", icon: Clock, label: "Desabilitado" },
-  erro: { bg: "bg-red-50", text: "text-[#E5484D]", icon: XCircle, label: "Erro" },
-};
+const INTEGRATIONS = [
+  { name: "Canal do Repasse (Marketplace)", desc: "Integração aguardando definição", icon: Wifi, status: "pendente", latency: "—" },
+  { name: "Avaliador Digital", desc: "Via API REST — aguardando endpoints", icon: Database, status: "pendente", latency: "—" },
+  { name: "WhatsApp Business API", desc: "Meta Cloud API com templates pré-aprovados", icon: MessageSquare, status: "pendente", latency: "—" },
+  { name: "Motor de Matching", desc: "Score 0-100 com 8 critérios ponderados", icon: Zap, status: "online", latency: "12ms" },
+];
 
 export default function AdminIntegracoesPage() {
-  const [data, setData] = useState<Record<string, IntegrationStatus> | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/admin/integracoes/health")
-      .then(r => r.json())
-      .then(d => setData(d.integrations))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const matching: IntegrationStatus = { name: "matching", status: "online", latency: 12, message: null };
-  const matchingMeta = { label: "Motor de Matching", desc: "Score 0-100 com 8 critérios ponderados", icon: Zap };
-
   return (
     <DashboardLayout role="admin" subtitle="Status das integrações do ecossistema">
       <div className="space-y-6">
@@ -43,64 +17,32 @@ export default function AdminIntegracoesPage() {
           <Plug className="w-5 h-5 text-[#2563EB]" />
           <h2 className="text-[20px] font-semibold text-[#111827]">Integrações</h2>
         </div>
-
-        {loading ? (
-          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-[#9AA0AB]" /></div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            {data && Object.entries(data).map(([key, item]) => {
-              const meta = META[key];
-              const style = STATUS_STYLE[item.status];
-              if (!meta || !style) return null;
-              const Icon = meta.icon;
-              const StatusIcon = style.icon;
-              return (
-                <div key={key} className="card-tradox">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-[rgba(37,99,235,0.08)] shrink-0">
-                        <Icon className="w-5 h-5 text-[#2563EB]" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[14px] font-semibold text-[#111827] truncate">{meta.label}</p>
-                        <p className="text-[12px] text-[#9AA0AB] mt-0.5">{meta.desc}</p>
-                        {item.latency !== null && item.status === "online" && (
-                          <p className="text-[12px] text-[#5B6370] mt-1">Latência: {item.latency}ms</p>
-                        )}
-                        {item.message && item.status !== "online" && (
-                          <p className="text-[12px] text-[#9AA0AB] mt-1">{item.message}</p>
-                        )}
-                      </div>
-                    </div>
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 ${style.bg} ${style.text}`}>
-                      <StatusIcon className="w-3 h-3" />
-                      {style.label}
-                    </span>
+        <div className="grid gap-4 md:grid-cols-2">
+          {INTEGRATIONS.map((item) => (
+            <div key={item.name} className="card-tradox">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-[rgba(37,99,235,0.08)]">
+                    <item.icon className="w-5 h-5 text-[#2563EB]" />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-semibold text-[#111827]">{item.name}</p>
+                    <p className="text-[12px] text-[#9AA0AB] mt-0.5">{item.desc}</p>
+                    {item.latency !== "—" && <p className="text-[12px] text-[#5B6370] mt-1">Latência: {item.latency}</p>}
                   </div>
                 </div>
-              );
-            })}
-
-            {/* Matching engine — always shown */}
-            <div className="card-tradox">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-[rgba(37,99,235,0.08)] shrink-0">
-                    <matchingMeta.icon className="w-5 h-5 text-[#2563EB]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-semibold text-[#111827]">{matchingMeta.label}</p>
-                    <p className="text-[12px] text-[#9AA0AB] mt-0.5">{matchingMeta.desc}</p>
-                    <p className="text-[12px] text-[#5B6370] mt-1">Latência: {matching.latency}ms</p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[rgba(37,99,235,0.1)] text-[#2563EB] shrink-0">
-                  <CheckCircle className="w-3 h-3" /> Online
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                  item.status === "online"
+                    ? "bg-[rgba(37,99,235,0.1)] text-[#2563EB]"
+                    : "bg-amber-50 text-amber-700"
+                }`}>
+                  {item.status === "online" ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                  {item.status === "online" ? "Online" : "Pendente"}
                 </span>
               </div>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
       </div>
     </DashboardLayout>
   );

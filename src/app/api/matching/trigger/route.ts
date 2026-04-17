@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase, insert } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
-import { fetchAllExternalOffers } from "@/lib/services/external-sources";
 import type { Wish, Offer } from "@/types";
 
 function toWish(r: Record<string, unknown>): Wish {
@@ -25,8 +24,7 @@ export async function POST(request: NextRequest) {
       const { data } = await supabase.from("wishes").select("*").eq("id", wishId).eq("status", "procurando");
       wishes = (data ?? []).map(toWish);
       const { data: allOffers } = await supabase.from("offers").select("*").eq("active", true);
-      const external = await fetchAllExternalOffers(wishes[0] ? { brand: wishes[0].brand, model: wishes[0].model } : undefined);
-      offers = [...(allOffers ?? []).map(toOffer), ...external.marketplace, ...external.avaliador];
+      offers = (allOffers ?? []).map(toOffer);
     } else if (offerId) {
       const { data } = await supabase.from("offers").select("*").eq("id", offerId).eq("active", true);
       offers = (data ?? []).map(toOffer);

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
-import { fetchAllExternalOffers } from "@/lib/services/external-sources";
 import type { Wish, Offer } from "@/types";
 
 function dbWishToType(row: Record<string, unknown>): Wish {
@@ -71,23 +70,15 @@ export async function POST(request: NextRequest) {
     const { data: wishRows, error: wErr } = await wishQuery;
     if (wErr) throw wErr;
 
-    // Fetch active offers from Supabase (lojistas + synced cache)
+    // Fetch active offers from Supabase
     const { data: offerRows, error: oErr } = await supabase
       .from("offers")
       .select("*")
       .eq("active", true);
     if (oErr) throw oErr;
 
-    // Fetch offers from external SQL Server sources (marketplace + avaliador)
-    // Circuit breaker inside — returns empty arrays if unavailable
-    const { marketplace, avaliador } = await fetchAllExternalOffers();
-
     const wishes = (wishRows ?? []).map(dbWishToType);
-    const offers: Offer[] = [
-      ...(offerRows ?? []).map(dbOfferToType),
-      ...marketplace,
-      ...avaliador,
-    ];
+    const offers = (offerRows ?? []).map(dbOfferToType);
 
     let newMatches = 0;
     let notifications = 0;
@@ -175,18 +166,6 @@ export async function POST(request: NextRequest) {
               sent_at: new Date().toISOString(),
             });
             notifications++;
-          }
-
-          // Writeback to Avaliador Digital if offer came from there
-          if (offer.source === "avaliador") {
-            import("@/lib/services/external-sources").then(({ notifyAvaliadorOfMatch }) => {
-              notifyAvaliadorOfMatch({
-                veiculoId: offer.sourceId,
-                desejoId: wish.id,
-                vendedorNome: wish.clientName ?? "Vendedor",
-                unidadesCount: 1,
-              }).catch(() => {});
-            });
           }
         }
       }
