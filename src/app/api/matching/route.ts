@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
+import { fetchExternalOffersForWish } from "@/lib/services/avaliador-api";
 import type { Wish, Offer } from "@/types";
 
 function dbWishToType(row: Record<string, unknown>): Wish {
@@ -78,13 +79,17 @@ export async function POST(request: NextRequest) {
     if (oErr) throw oErr;
 
     const wishes = (wishRows ?? []).map(dbWishToType);
-    const offers = (offerRows ?? []).map(dbOfferToType);
+    const localOffers = (offerRows ?? []).map(dbOfferToType);
 
     let newMatches = 0;
     let notifications = 0;
 
     for (const wish of wishes) {
-      for (const offer of offers) {
+      // Fetch external offers (Avaliador Digital API) for this wish's model
+      const externalOffers = await fetchExternalOffersForWish(wish);
+      const offersForThisWish: Offer[] = [...localOffers, ...externalOffers];
+
+      for (const offer of offersForThisWish) {
         const result = calculateMatchScore(wish, offer);
         if (result.score < MATCH_THRESHOLDS.SUGGESTION) continue;
 
@@ -176,7 +181,7 @@ export async function POST(request: NextRequest) {
       newMatches,
       notifications,
       wishesProcessed: wishes.length,
-      offersProcessed: offers.length,
+      offersProcessed: localOffers.length,
     });
   } catch (error) {
     console.error("[API] Matching error:", error);
