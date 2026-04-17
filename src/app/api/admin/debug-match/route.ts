@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import { fetchAvaliadorOffersForWish } from "@/lib/services/avaliador-api";
 import { calculateMatchScore } from "@/lib/services/matching";
 import type { Wish, Offer } from "@/types";
 
 /**
- * TEMPORARY PUBLIC endpoint for diagnosing matching issues.
- * TODO: re-add auth after diagnosis complete.
+ * Admin-only debug endpoint — test matching flow for a hypothetical wish
+ * without creating anything in the DB.
+ *
+ * Usage: POST /api/admin/debug-match with body:
+ *   { "brand": "Honda", "model": "Fit", "yearMin": 2015, "yearMax": 2015,
+ *     "kmMax": 60000, "cityRef": "Belo Horizonte", "stateRef": "MG" }
  */
 
 async function runDebug(body: Record<string, unknown>) {
@@ -38,38 +43,6 @@ async function runDebug(body: Record<string, unknown>) {
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
   };
 
-  // ALSO test the raw API call to confirm connectivity
-  const baseUrl = envUrl || "https://hmlv2api.avaliadordigital.com.br";
-  const testUrl = new URL(`${baseUrl}/API/V1/Get/ConsultaPublica`);
-  testUrl.searchParams.set("modelo", wish.model);
-  testUrl.searchParams.set("km_inicial", "0");
-  testUrl.searchParams.set("km_final", String(wish.kmMax ?? 500000));
-  if (wish.cityRef) testUrl.searchParams.set("cidade", wish.cityRef);
-  if (wish.stateRef) testUrl.searchParams.set("uf", wish.stateRef);
-
-  let rawFetchResult: Record<string, unknown> = {};
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
-    const rawRes = await fetch(testUrl.toString(), {
-      method: "GET",
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
-    const rawText = await rawRes.text();
-    rawFetchResult = {
-      status: rawRes.status,
-      ok: rawRes.ok,
-      contentType: rawRes.headers.get("content-type"),
-      bodyPreview: rawText.slice(0, 500),
-      bodySize: rawText.length,
-    };
-  } catch (e) {
-    rawFetchResult = { error: e instanceof Error ? e.message : String(e) };
-  }
-
   const startTime = Date.now();
   let externalOffers: Offer[] = [];
   let fetchError: string | null = null;
@@ -100,45 +73,38 @@ async function runDebug(body: Record<string, unknown>) {
 
   return {
     env: {
-      AVALIADOR_API_ENABLED: envEnabled,
-      AVALIADOR_API_ENABLED_equals_true: envEnabled === "true",
-      AVALIADOR_API_URL: envUrl ?? "(default)",
+      AVALIADOR_API_ENABLED_raw: JSON.stringify(envEnabled),
+      AVALIADOR_API_ENABLED_trimmed: envEnabled?.trim() === "true",
+      AVALIADOR_API_URL: envUrl?.trim() ?? "(default)",
     },
-    wish: {
-      brand: wish.brand,
-      model: wish.model,
-      yearMin: wish.yearMin,
-      yearMax: wish.yearMax,
-      kmMax: wish.kmMax,
-      cityRef: wish.cityRef,
-      stateRef: wish.stateRef,
-    },
-    rawApiTest: {
-      url: testUrl.toString(),
-      ...rawFetchResult,
-    },
-    serviceCall: {
-      fetchTimeMs: fetchTime,
-      fetchError,
-      externalOffersCount: externalOffers.length,
-    },
+    wish: { brand: wish.brand, model: wish.model, yearMin: wish.yearMin, yearMax: wish.yearMax, kmMax: wish.kmMax, cityRef: wish.cityRef, stateRef: wish.stateRef },
+    serviceCall: { fetchTimeMs: fetchTime, fetchError, externalOffersCount: externalOffers.length },
     scoredMatches: scored,
     summary: {
       above80: scored.filter((s) => s.score >= 80).length,
       above70: scored.filter((s) => s.score >= 70).length,
       above50: scored.filter((s) => s.score >= 50).length,
-      below50: scored.filter((s) => s.score < 50).length,
     },
   };
 }
 
 export async function POST(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const role = (session.user as Record<string, unknown>).role as string;
+  if (role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+
   const body = await request.json().catch(() => ({}));
   const result = await runDebug(body);
   return NextResponse.json(result);
 }
 
 export async function GET(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const role = (session.user as Record<string, unknown>).role as string;
+  if (role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+
   const sp = request.nextUrl.searchParams;
   const body: Record<string, unknown> = {
     brand: sp.get("brand") ?? "Honda",

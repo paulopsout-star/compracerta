@@ -84,12 +84,12 @@ async function fetchAvaliadorRaw(params: {
   cidade?: string;
   uf?: string;
 }): Promise<Offer[]> {
-  if (process.env.AVALIADOR_API_ENABLED !== "true") {
+  if (process.env.AVALIADOR_API_ENABLED?.trim() !== "true") {
     console.log("[Avaliador API] Skipped — AVALIADOR_API_ENABLED not 'true'");
     return [];
   }
 
-  const baseUrl = process.env.AVALIADOR_API_URL || DEFAULT_BASE_URL;
+  const baseUrl = (process.env.AVALIADOR_API_URL?.trim()) || DEFAULT_BASE_URL;
   const key = cacheKey(params);
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
@@ -177,11 +177,11 @@ export async function checkAvaliadorHealth(): Promise<{
   latency: number | null;
   message: string | null;
 }> {
-  if (process.env.AVALIADOR_API_ENABLED !== "true") {
+  if (process.env.AVALIADOR_API_ENABLED?.trim() !== "true") {
     return { status: "desabilitado", latency: null, message: "AVALIADOR_API_ENABLED não está ligado" };
   }
 
-  const baseUrl = process.env.AVALIADOR_API_URL || DEFAULT_BASE_URL;
+  const baseUrl = (process.env.AVALIADOR_API_URL?.trim()) || DEFAULT_BASE_URL;
   const start = Date.now();
 
   try {
