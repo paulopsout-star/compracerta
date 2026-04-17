@@ -131,7 +131,7 @@ async function fetchAvaliadorRaw(params: {
     if (!body.success || !Array.isArray(body.data)) return [];
 
     const offers = body.data
-      .filter((v) => ["Publicado", "Avaliado", "Pendente"].includes(v.status))
+      .filter((v) => ["Publicado", "Avaliado", "Pendente", "Comprado"].includes(v.status))
       .map(vehicleToOffer);
 
     console.log(`[Avaliador API] ${offers.length} active offers after filter`);

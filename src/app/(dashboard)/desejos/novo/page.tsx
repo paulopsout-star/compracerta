@@ -28,6 +28,7 @@ const STATUS_CLS: Record<string, string> = {
   Avaliado: "bg-[rgba(37,99,235,0.1)] text-[#2563EB]",
   Publicado: "bg-green-50 text-green-700",
   Pendente: "bg-amber-50 text-amber-700",
+  Comprado: "bg-purple-50 text-purple-700",
 };
 
 function formatDate(iso: string) {
