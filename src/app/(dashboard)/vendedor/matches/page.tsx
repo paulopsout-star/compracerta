@@ -52,9 +52,9 @@ function MatchesContent() {
 
   function clearFilter() { router.push("/vendedor/matches"); }
 
-  // Soma fixa: 56 + 92 + 56 + 82 + 62 + 100 + 90 + 130 = 668
-  // + veiculo min 140 + gaps + padding = ~856
-  const gridTemplate = "minmax(140px, 1fr) 56px 92px 56px 82px 62px 100px 90px 130px";
+  // Soma fixa: 56 + 92 + 56 + 82 + 62 + 100 + 90 + 88 = 626
+  // + veiculo min 140 + gaps + padding = ~814
+  const gridTemplate = "minmax(140px, 1fr) 56px 92px 56px 82px 62px 100px 90px 88px";
 
   return (
     <DashboardLayout role="vendedor" subtitle={subtitle}>
@@ -202,12 +202,9 @@ function MatchesContent() {
                       </div>
 
                       {/* Ações */}
-                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                        <button className="h-[26px] px-2.5 rounded-[6px] bg-[#2563EB] text-white text-[11px] font-semibold hover:brightness-90 transition-all">
+                      <div className="flex items-center justify-end whitespace-nowrap">
+                        <button className="h-[28px] px-4 rounded-[6px] bg-[#2563EB] text-white text-[11px] font-semibold hover:brightness-90 transition-all">
                           Contatar
-                        </button>
-                        <button className="h-[26px] px-2.5 rounded-[6px] border border-[#E8EAEE] text-[11px] font-medium text-[#5B6370] hover:border-[#E5484D] hover:text-[#E5484D] transition-colors">
-                          Rejeitar
                         </button>
                       </div>
                     </div>
@@ -250,12 +247,9 @@ function MatchesContent() {
                           <MapPin className="w-3 h-3" />{offer.city as string}/{offer.state as string}
                         </div>
                       </div>
-                      <div className="flex gap-2 mt-3">
-                        <button className="flex-1 h-[34px] rounded-[8px] bg-[#2563EB] text-white text-[12px] font-semibold hover:brightness-90 transition-all">
+                      <div className="mt-3">
+                        <button className="w-full h-[34px] rounded-[8px] bg-[#2563EB] text-white text-[12px] font-semibold hover:brightness-90 transition-all">
                           Contatar
-                        </button>
-                        <button className="h-[34px] px-4 rounded-[8px] border border-[#E8EAEE] text-[12px] font-medium text-[#5B6370] hover:border-[#E5484D] hover:text-[#E5484D] transition-colors">
-                          Rejeitar
                         </button>
                       </div>
                     </div>
