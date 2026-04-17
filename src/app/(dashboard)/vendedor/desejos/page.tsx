@@ -82,143 +82,148 @@ export default function MeusDesejosPage() {
           </div>
         ) : (
           <>
-            {/* ─── Desktop / Tablet: List view (table) ─── */}
-            <div className="card-tradox !p-0 overflow-hidden hidden md:block">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[1080px]" style={{ tableLayout: "fixed" }}>
-                  <colgroup>
-                    <col style={{ width: "22%" }} /> {/* Veículo */}
-                    <col style={{ width: "12%" }} /> {/* Cliente */}
-                    <col style={{ width: "9%" }} />  {/* Ano */}
-                    <col style={{ width: "17%" }} /> {/* Preço */}
-                    <col style={{ width: "11%" }} /> {/* KM */}
-                    <col style={{ width: "9%" }} />  {/* Data */}
-                    <col style={{ width: "10%" }} /> {/* Status */}
-                    <col style={{ width: "10%" }} /> {/* Ações */}
-                  </colgroup>
-                  <thead>
-                    <tr className="bg-[#F7F8FA] border-b border-[#EEF0F3]">
-                      <th className="text-left pl-5 pr-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Veículo</th>
-                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Cliente</th>
-                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Ano</th>
-                      <th className="text-right px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Preço</th>
-                      <th className="text-right px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">KM</th>
-                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Data</th>
-                      <th className="text-center px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Status</th>
-                      <th className="text-right pl-3 pr-5 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F3F4F6]">
-                    {wishes.map((w) => {
-                      const s = STATUS_BADGE[w.status as string] ?? STATUS_BADGE.procurando;
-                      const u = URGENCY_BADGE[w.urgency as string] ?? URGENCY_BADGE.media;
-                      const yMin = w.year_min as number | null;
-                      const yMax = w.year_max as number | null;
-                      const pMin = w.price_min as number | null;
-                      const pMax = w.price_max as number | null;
-                      const kMax = w.km_max as number | null;
-                      const isActive = ["procurando", "match_encontrado"].includes(w.status as string);
-                      return (
-                        <tr key={w.id as string} className="h-[64px] hover:bg-[#FAFBFC] transition-colors group align-middle">
-                          {/* Veículo — única coluna que permite quebra (título + subtexto) */}
-                          <td className="pl-5 pr-3 align-middle">
-                            <p className="text-[13px] font-semibold text-[#111827] leading-snug truncate" title={`${w.brand} ${w.model}`}>
-                              {w.brand as string} {w.model as string}
-                            </p>
-                            <p className="text-[11px] text-[#9AA0AB] leading-snug mt-0.5 truncate" title={(w.version as string) || undefined}>
-                              {w.version ? (w.version as string) : "—"}
-                            </p>
-                          </td>
-                          {/* Cliente */}
-                          <td className="px-3 align-middle">
-                            <p className="text-[13px] text-[#111827] truncate whitespace-nowrap" title={w.client_name as string}>
-                              {w.client_name as string}
-                            </p>
-                          </td>
-                          {/* Ano */}
-                          <td className="px-3 align-middle text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap">
-                            {yMin && yMax ? (yMin === yMax ? yMin : `${yMin}–${yMax}`) : "—"}
-                          </td>
-                          {/* Preço */}
-                          <td className="px-3 align-middle text-right text-[13px] text-[#111827] tabular-nums whitespace-nowrap">
-                            {pMin && pMax
-                              ? <span>{fmt(pMin)} <span className="text-[#9AA0AB]">–</span> {fmt(pMax)}</span>
-                              : pMax ? fmt(pMax)
-                              : pMin ? fmt(pMin)
-                              : <span className="text-[#9AA0AB]">—</span>}
-                          </td>
-                          {/* KM */}
-                          <td className="px-3 align-middle text-right text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap">
-                            {kMax ? `até ${kMax.toLocaleString("pt-BR")} km` : <span className="text-[#9AA0AB]">—</span>}
-                          </td>
-                          {/* Data */}
-                          <td className="px-3 align-middle text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap">
-                            {new Date(w.created_at as string).toLocaleDateString("pt-BR")}
-                          </td>
-                          {/* Status (com urgência ao lado) */}
-                          <td className="px-3 align-middle whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${s.cls} whitespace-nowrap`}>{s.label}</span>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${u.cls} whitespace-nowrap`}>{u.label}</span>
-                            </div>
-                          </td>
-                          {/* Ações */}
-                          <td className="pl-3 pr-5 align-middle">
-                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-                              <Link
-                                href="/vendedor/matches"
-                                className="h-[30px] px-3 rounded-[7px] bg-[#2563EB] text-white text-[11px] font-semibold inline-flex items-center hover:brightness-90 transition-all whitespace-nowrap"
-                              >
-                                Ver Matches
-                              </Link>
+            {/* ─── Desktop / Tablet: List view (8 columns, 100% width, no scroll) ─── */}
+            <div className="card-tradox !p-0 overflow-hidden hidden md:block w-full">
+              <table className="w-full max-w-full" style={{ tableLayout: "fixed" }}>
+                <colgroup>
+                  <col style={{ width: "24%" }} />  {/* Veículo */}
+                  <col style={{ width: "12%" }} />  {/* Cliente */}
+                  <col style={{ width: "9%" }} />   {/* Ano */}
+                  <col style={{ width: "16%" }} />  {/* Preço */}
+                  <col style={{ width: "11%" }} />  {/* KM */}
+                  <col style={{ width: "9%" }} />   {/* Data */}
+                  <col style={{ width: "11%" }} />  {/* Status */}
+                  <col style={{ width: "8%" }} />   {/* Ações */}
+                </colgroup>
+                <thead>
+                  <tr className="bg-[#F7F8FA] border-b border-[#EEF0F3]">
+                    <th className="text-left pl-4 pr-2 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] overflow-hidden">Veículo</th>
+                    <th className="text-left px-2 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] overflow-hidden">Cliente</th>
+                    <th className="text-left px-2 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] overflow-hidden">Ano</th>
+                    <th className="text-right px-2 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] overflow-hidden">Preço</th>
+                    <th className="text-right px-2 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] overflow-hidden">KM</th>
+                    <th className="text-left px-2 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] overflow-hidden">Data</th>
+                    <th className="text-center px-2 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] overflow-hidden">Status</th>
+                    <th className="text-right pl-2 pr-4 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] overflow-hidden">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F3F4F6]">
+                  {wishes.map((w) => {
+                    const s = STATUS_BADGE[w.status as string] ?? STATUS_BADGE.procurando;
+                    const u = URGENCY_BADGE[w.urgency as string] ?? URGENCY_BADGE.media;
+                    const yMin = w.year_min as number | null;
+                    const yMax = w.year_max as number | null;
+                    const pMin = w.price_min as number | null;
+                    const pMax = w.price_max as number | null;
+                    const kMax = w.km_max as number | null;
+                    const isActive = ["procurando", "match_encontrado"].includes(w.status as string);
 
-                              {/* Ações secundárias em menu */}
-                              <div className="relative">
-                                <button
-                                  onClick={() => setOpenMenu(openMenu === (w.id as string) ? null : (w.id as string))}
-                                  className="p-1.5 rounded-md text-[#C1C7D0] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-all"
-                                >
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </button>
-                                {openMenu === w.id && (
-                                  <>
-                                    <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
-                                    <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-[10px] shadow-lg shadow-black/10 border border-[#EEF0F3] py-1.5 min-w-[180px]">
-                                      {isActive && (
-                                        <button
-                                          onClick={() => updateStatus(w.id as string, "em_negociacao")}
-                                          className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#5B6370] hover:bg-[#F7F8FA] transition-colors text-left"
-                                        >
-                                          Em Negociação
-                                        </button>
-                                      )}
-                                      {w.status === "em_negociacao" && (
-                                        <button
-                                          onClick={() => updateStatus(w.id as string, "convertido")}
-                                          className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-green-700 hover:bg-green-50 transition-colors text-left"
-                                        >
-                                          Marcar como Vendido
-                                        </button>
-                                      )}
+                    let priceDisplay = "—";
+                    if (pMin && pMax) priceDisplay = `${fmt(pMin)}–${fmt(pMax)}`;
+                    else if (pMax) priceDisplay = fmt(pMax);
+                    else if (pMin) priceDisplay = fmt(pMin);
+
+                    return (
+                      <tr key={w.id as string} className="h-[64px] hover:bg-[#FAFBFC] transition-colors align-middle">
+                        {/* Veículo — truncate com tooltip */}
+                        <td className="pl-4 pr-2 align-middle overflow-hidden">
+                          <p className="text-[13px] font-semibold text-[#111827] leading-snug truncate" title={`${w.brand} ${w.model}`}>
+                            {w.brand as string} {w.model as string}
+                          </p>
+                          <p className="text-[11px] text-[#9AA0AB] leading-snug mt-0.5 truncate" title={(w.version as string) || undefined}>
+                            {w.version ? (w.version as string) : "—"}
+                          </p>
+                        </td>
+                        {/* Cliente — truncate */}
+                        <td className="px-2 align-middle overflow-hidden">
+                          <p className="text-[13px] text-[#111827] truncate" title={w.client_name as string}>
+                            {w.client_name as string}
+                          </p>
+                        </td>
+                        {/* Ano — nowrap */}
+                        <td className="px-2 align-middle text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
+                          {yMin && yMax ? (yMin === yMax ? yMin : `${yMin}–${yMax}`) : "—"}
+                        </td>
+                        {/* Preço — nowrap + truncate */}
+                        <td className="px-2 align-middle text-right text-[12px] text-[#111827] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis" title={priceDisplay}>
+                          {priceDisplay}
+                        </td>
+                        {/* KM — nowrap */}
+                        <td className="px-2 align-middle text-right text-[12px] text-[#5B6370] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
+                          {kMax ? `até ${kMax.toLocaleString("pt-BR")} km` : "—"}
+                        </td>
+                        {/* Data — nowrap */}
+                        <td className="px-2 align-middle text-[12px] text-[#5B6370] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
+                          {new Date(w.created_at as string).toLocaleDateString("pt-BR")}
+                        </td>
+                        {/* Status — badges horizontais */}
+                        <td className="px-2 align-middle overflow-hidden">
+                          <div className="flex items-center justify-center gap-1 min-w-0">
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shrink-0 ${s.cls}`}>{s.label}</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shrink-0 ${u.cls}`}>{u.label}</span>
+                          </div>
+                        </td>
+                        {/* Ações — CTA + menu ··· */}
+                        <td className="pl-2 pr-4 align-middle overflow-visible">
+                          <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                            <Link
+                              href="/vendedor/matches"
+                              className="h-[28px] px-2.5 rounded-[6px] bg-[#2563EB] text-white text-[11px] font-semibold inline-flex items-center hover:brightness-90 transition-all whitespace-nowrap shrink-0"
+                            >
+                              Ver
+                            </Link>
+                            <div className="relative shrink-0">
+                              <button
+                                onClick={() => setOpenMenu(openMenu === (w.id as string) ? null : (w.id as string))}
+                                className="w-[28px] h-[28px] flex items-center justify-center rounded-md text-[#C1C7D0] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-all"
+                              >
+                                <MoreHorizontal className="w-4 h-4" />
+                              </button>
+                              {openMenu === w.id && (
+                                <>
+                                  <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
+                                  <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-[10px] shadow-lg shadow-black/10 border border-[#EEF0F3] py-1.5 min-w-[180px]">
+                                    <Link
+                                      href="/vendedor/matches"
+                                      onClick={() => setOpenMenu(null)}
+                                      className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#2563EB] hover:bg-[#F7F8FA] transition-colors"
+                                    >
+                                      Ver Matches
+                                    </Link>
+                                    {isActive && (
                                       <button
-                                        onClick={() => deleteWish(w.id as string)}
-                                        className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#E5484D] hover:bg-red-50 transition-colors text-left"
+                                        onClick={() => updateStatus(w.id as string, "em_negociacao")}
+                                        className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#5B6370] hover:bg-[#F7F8FA] transition-colors text-left"
                                       >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                        Excluir
+                                        Em Negociação
                                       </button>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
+                                    )}
+                                    {w.status === "em_negociacao" && (
+                                      <button
+                                        onClick={() => updateStatus(w.id as string, "convertido")}
+                                        className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-green-700 hover:bg-green-50 transition-colors text-left"
+                                      >
+                                        Marcar como Vendido
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => deleteWish(w.id as string)}
+                                      className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#E5484D] hover:bg-red-50 transition-colors text-left"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      Excluir
+                                    </button>
+                                  </div>
+                                </>
+                              )}
                             </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
             {/* ─── Mobile: compact stacked list ─── */}
