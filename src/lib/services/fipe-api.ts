@@ -67,6 +67,50 @@ export async function fetchBrands(): Promise<BrandOption[]> {
   }
 }
 
+/**
+ * Group FIPE models by their base model name (first word or first two words
+ * if both are capitalized — covers cases like "Corolla Cross", "T-Cross").
+ * Returns { baseModel: [versions...] }.
+ */
+export function groupModelsByBase(models: ModelOption[]): {
+  baseModels: { value: string; label: string; count: number }[];
+  versionsByBase: Record<string, ModelOption[]>;
+} {
+  const versionsByBase: Record<string, ModelOption[]> = {};
+
+  for (const m of models) {
+    const words = m.label.split(" ");
+    let baseName = words[0] ?? m.label;
+
+    // If second word is also capitalized and not a number/digit, include it
+    // e.g. "Corolla Cross", "CR V", "T-Cross"
+    if (words.length >= 2) {
+      const w2 = words[1];
+      const isCapitalized = /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(w2);
+      const isWord = /^[A-Za-zÁ-ú-]+$/.test(w2);
+      const isCommonModifier = /^(Cross|Hatch|Sedan|Coupe|Cabrio|GT|Sport)$/i.test(w2);
+      if (isCapitalized && isWord && isCommonModifier) {
+        baseName = `${words[0]} ${w2}`;
+      }
+    }
+
+    if (!versionsByBase[baseName]) versionsByBase[baseName] = [];
+    // Version = everything after the base model name
+    const versionLabel = m.label.slice(baseName.length).trim();
+    versionsByBase[baseName].push({
+      value: m.value,
+      label: versionLabel || "Sem versão específica",
+      fipeCode: m.fipeCode,
+    });
+  }
+
+  const baseModels = Object.entries(versionsByBase)
+    .map(([label, versions]) => ({ value: label, label, count: versions.length }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+  return { baseModels, versionsByBase };
+}
+
 export async function fetchModels(brandCode: string): Promise<ModelOption[]> {
   const cached = modelsCache.get(brandCode);
   if (cached && cached.expiresAt > Date.now()) return cached.data;

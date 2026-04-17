@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -14,6 +14,8 @@ import {
   VALIDITY_OPTIONS,
 } from "@/lib/data/fipe-mock";
 import { SearchableSelect, type SearchableOption } from "@/components/forms/searchable-select";
+import { FormattedInput } from "@/components/forms/formatted-input";
+import { groupModelsByBase } from "@/lib/services/fipe-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,10 +40,30 @@ export function WishForm({ onSubmit }: WishFormProps) {
   const [loading, setLoading] = useState(false);
   const [brands, setBrands] = useState<SearchableOption[]>([]);
   const [brandsLoading, setBrandsLoading] = useState(true);
-  const [models, setModels] = useState<SearchableOption[]>([]);
+  const [fipeModels, setFipeModels] = useState<{ value: string; label: string; fipeCode: string }[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selectedBrandCode, setSelectedBrandCode] = useState<string>("");
-  const [selectedModelCode, setSelectedModelCode] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedVersionCode, setSelectedVersionCode] = useState<string>("");
+
+  // Derived: base models and versions grouped
+  const { baseModels, versionsByBase } = useMemo(
+    () => groupModelsByBase(fipeModels),
+    [fipeModels]
+  );
+
+  const baseModelOptions: SearchableOption[] = useMemo(
+    () => baseModels.map((m) => ({ value: m.value, label: `${m.label} (${m.count})` })),
+    [baseModels]
+  );
+
+  const versionOptions: SearchableOption[] = useMemo(
+    () => (selectedModel ? (versionsByBase[selectedModel] ?? []) : []).map((v) => ({
+      value: v.value,
+      label: v.label,
+    })),
+    [selectedModel, versionsByBase]
+  );
 
   // Load brands on mount
   useEffect(() => {
@@ -53,11 +75,11 @@ export function WishForm({ onSubmit }: WishFormProps) {
 
   // Load models when brand changes
   useEffect(() => {
-    if (!selectedBrandCode) { setModels([]); return; }
+    if (!selectedBrandCode) { setFipeModels([]); return; }
     setModelsLoading(true);
     fetch(`/api/fipe/modelos/${selectedBrandCode}`)
       .then((r) => r.json())
-      .then((d) => setModels(d.data ?? []))
+      .then((d) => setFipeModels(d.data ?? []))
       .finally(() => setModelsLoading(false));
   }, [selectedBrandCode]);
 
@@ -129,12 +151,24 @@ export function WishForm({ onSubmit }: WishFormProps) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="clientPhone">Telefone (WhatsApp) *</Label>
-            <Input id="clientPhone" placeholder="(31) 99999-9999" {...register("clientPhone")} />
+            <FormattedInput
+              id="clientPhone"
+              format="phone"
+              placeholder="(31) 99999-9999"
+              value={(watch("clientPhone") as string | undefined) ?? ""}
+              onValueChange={(v) => setValue("clientPhone", v)}
+            />
             {errors.clientPhone && <p className="text-xs text-destructive">{errors.clientPhone.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="clientCpf">CPF (opcional)</Label>
-            <Input id="clientCpf" placeholder="000.000.000-00" {...register("clientCpf")} />
+            <FormattedInput
+              id="clientCpf"
+              format="cpf"
+              placeholder="000.000.000-00"
+              value={(watch("clientCpf") as string | undefined) ?? ""}
+              onValueChange={(v) => setValue("clientCpf", v)}
+            />
             {errors.clientCpf && <p className="text-xs text-destructive">{errors.clientCpf.message}</p>}
           </div>
           <div className="space-y-2">
@@ -168,9 +202,11 @@ export function WishForm({ onSubmit }: WishFormProps) {
               emptyMessage="Marca não encontrada"
               onChange={(opt) => {
                 setSelectedBrandCode(opt.value);
-                setSelectedModelCode("");
+                setSelectedModel("");
+                setSelectedVersionCode("");
                 setValue("brand", opt.label);
                 setValue("model", "");
+                setValue("version", "");
               }}
             />
             {errors.brand && <p className="text-xs text-destructive">{errors.brand.message}</p>}
@@ -179,46 +215,89 @@ export function WishForm({ onSubmit }: WishFormProps) {
             <Label htmlFor="model-select">Modelo *</Label>
             <SearchableSelect
               id="model-select"
-              options={models}
-              value={selectedModelCode}
+              options={baseModelOptions}
+              value={selectedModel}
               loading={modelsLoading}
               disabled={!selectedBrandCode || modelsLoading}
               placeholder={selectedBrandCode ? "Selecione o modelo" : "Selecione a marca primeiro"}
               emptyMessage="Modelo não encontrado"
               onChange={(opt) => {
-                setSelectedModelCode(opt.value);
-                setValue("model", opt.label);
+                setSelectedModel(opt.value);
+                setSelectedVersionCode("");
+                setValue("model", opt.value);
+                setValue("version", "");
               }}
             />
             {errors.model && <p className="text-xs text-destructive">{errors.model.message}</p>}
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="version">Versão (opcional)</Label>
-            <Input id="version" placeholder="Ex: EXL 2.0 CVT" {...register("version")} />
+            <Label htmlFor="version-select">Versão (opcional)</Label>
+            <SearchableSelect
+              id="version-select"
+              options={versionOptions}
+              value={selectedVersionCode}
+              disabled={!selectedModel}
+              placeholder={selectedModel ? "Selecione a versão" : "Selecione o modelo primeiro"}
+              emptyMessage="Versão não encontrada"
+              onChange={(opt) => {
+                setSelectedVersionCode(opt.value);
+                setValue("version", opt.label);
+              }}
+            />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="yearMin">Ano mínimo</Label>
-            <Input id="yearMin" type="number" placeholder="2020" {...register("yearMin")} />
+            <FormattedInput
+              id="yearMin"
+              format="year"
+              value={(watch("yearMin") as number | undefined) ?? ""}
+              onValueChange={(v) => setValue("yearMin", v ? parseInt(v) : undefined)}
+            />
             {errors.yearMin && <p className="text-xs text-destructive">{errors.yearMin.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="yearMax">Ano máximo</Label>
-            <Input id="yearMax" type="number" placeholder="2025" {...register("yearMax")} />
+            <FormattedInput
+              id="yearMax"
+              format="year"
+              value={(watch("yearMax") as number | undefined) ?? ""}
+              onValueChange={(v) => setValue("yearMax", v ? parseInt(v) : undefined)}
+            />
             {errors.yearMax && <p className="text-xs text-destructive">{errors.yearMax.message}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="kmMax">Quilometragem máxima</Label>
-            <Input id="kmMax" type="number" placeholder="50000" {...register("kmMax")} />
+            <FormattedInput
+              id="kmMax"
+              format="km"
+              suffix="km"
+              value={(watch("kmMax") as number | undefined) ?? ""}
+              onValueChange={(v) => setValue("kmMax", v ? parseInt(v) : undefined)}
+            />
             {errors.kmMax && <p className="text-xs text-destructive">{errors.kmMax.message}</p>}
           </div>
+          <div className="space-y-2 sm:col-span-2 hidden" />
           <div className="space-y-2">
-            <Label htmlFor="priceMin">Preço mínimo (R$)</Label>
-            <Input id="priceMin" type="number" placeholder="80000" {...register("priceMin")} />
+            <Label htmlFor="priceMin">Preço mínimo</Label>
+            <FormattedInput
+              id="priceMin"
+              format="currency"
+              prefix="R$"
+              value={(watch("priceMin") as number | undefined) ?? ""}
+              onValueChange={(v) => setValue("priceMin", v ? parseInt(v) : undefined)}
+            />
             {errors.priceMin && <p className="text-xs text-destructive">{errors.priceMin.message}</p>}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="priceMax">Preço máximo (R$)</Label>
-            <Input id="priceMax" type="number" placeholder="130000" {...register("priceMax")} />
+            <Label htmlFor="priceMax">Preço máximo</Label>
+            <FormattedInput
+              id="priceMax"
+              format="currency"
+              prefix="R$"
+              value={(watch("priceMax") as number | undefined) ?? ""}
+              onValueChange={(v) => setValue("priceMax", v ? parseInt(v) : undefined)}
+            />
             {errors.priceMax && <p className="text-xs text-destructive">{errors.priceMax.message}</p>}
           </div>
 
