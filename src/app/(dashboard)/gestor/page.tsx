@@ -1,204 +1,99 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MetricHero } from "@/components/dashboard/metric-hero";
 import { QuickActions } from "@/components/dashboard/quick-actions";
-import { AreaChart } from "@/components/dashboard/area-chart";
-import { TradoxTable } from "@/components/dashboard/tradox-table";
-import { Trophy, AlertTriangle, Lightbulb, FileDown } from "lucide-react";
+import { Trophy, AlertTriangle, Lightbulb, FileDown, Loader2, BarChart3 } from "lucide-react";
+
+interface DashboardData {
+  totalWishes: number;
+  totalMatches: number;
+  sellers: { id: string; name: string; email: string }[];
+  wishes: { id: string; brand: string; model: string; status: string; seller_id: string }[];
+}
 
 export default function GestorDashboard() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/dashboard")
+      .then((r) => r.json())
+      .then((d) => setData(d))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const hasData = data && data.totalWishes > 0;
+
   return (
-    <DashboardLayout
-      role="gestor"
-      userName="Ricardo"
-      subtitle="Acompanhe a performance da sua equipe"
-    >
+    <DashboardLayout role="gestor" userName="Ricardo" subtitle="Acompanhe a performance da sua equipe">
       <div className="space-y-6">
-        {/* Row 1 */}
-        <div className="grid gap-6 lg:grid-cols-5">
-          <div className="lg:col-span-2 space-y-6">
-            <MetricHero
-              label="Pipeline da Equipe"
-              value="R$ 2,4M"
-              trend={{ value: 18, label: "vs. mês anterior" }}
-              subtitle="47 desejos ativos na sua rede"
-              sparklineData={[800, 1200, 1100, 1600, 1800, 2000, 2200, 2100, 2400]}
-              primaryAction={{ label: "Ver Pipeline" }}
-              secondaryAction={{ label: "Exportar" }}
-            />
-            <QuickActions
-              actions={[
-                { label: "Ranking", icon: Trophy, href: "/gestor/equipe" },
-                { label: "Oport. Perdidas", icon: AlertTriangle, href: "/gestor/relatorios" },
-                { label: "Insights", icon: Lightbulb, href: "/gestor/desejos" },
-                { label: "Exportar", icon: FileDown, href: "/gestor/relatorios" },
-              ]}
-            />
-          </div>
-          <div className="lg:col-span-3">
-            <AreaChart
-              title="Performance da Equipe"
-              subtitle="Desejos cadastrados x convertidos"
-              currentValue="47"
-              trend={{ value: 15, label: "desejos este mês" }}
-              data={[
-                { label: "Nov", value: 28 },
-                { label: "Dez", value: 35 },
-                { label: "Jan", value: 32 },
-                { label: "Fev", value: 40 },
-                { label: "Mar", value: 43 },
-                { label: "Abr", value: 47 },
-              ]}
-            />
-          </div>
-        </div>
+        {loading ? (
+          <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-[#9AA0AB]" /></div>
+        ) : (
+          <>
+            <div className="grid gap-6 lg:grid-cols-5">
+              <div className="lg:col-span-3 space-y-6">
+                <MetricHero
+                  label="Pipeline da Equipe"
+                  value={String(data?.totalWishes ?? 0)}
+                  trend={{ value: 0, label: `${data?.sellers?.length ?? 0} vendedor${(data?.sellers?.length ?? 0) === 1 ? "" : "es"} ativo${(data?.sellers?.length ?? 0) === 1 ? "" : "s"}` }}
+                  subtitle={`${data?.totalMatches ?? 0} match${(data?.totalMatches ?? 0) === 1 ? "" : "es"} gerado${(data?.totalMatches ?? 0) === 1 ? "" : "s"} pela equipe`}
+                  sparklineData={[0, 0, 0, 0, 0, data?.totalWishes ?? 0]}
+                  primaryAction={{ label: "Ver Pipeline" }}
+                  secondaryAction={{ label: "Exportar" }}
+                />
+                <QuickActions
+                  actions={[
+                    { label: "Ranking", icon: Trophy, href: "/gestor/equipe" },
+                    { label: "Oportunidades", icon: AlertTriangle, href: "/gestor/desejos" },
+                    { label: "Insights", icon: Lightbulb, href: "/gestor/relatorios" },
+                    { label: "Exportar", icon: FileDown, href: "/gestor/relatorios" },
+                  ]}
+                />
+              </div>
+              <div className="lg:col-span-2">
+                <div className="card-tradox h-full">
+                  <p className="text-[11px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px]">Equipe</p>
+                  {(data?.sellers?.length ?? 0) === 0 ? (
+                    <div className="mt-6 text-center py-8">
+                      <p className="text-[13px] text-[#9AA0AB]">Nenhum vendedor cadastrado na sua concessionária.</p>
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      {data?.sellers?.slice(0, 5).map((s) => (
+                        <div key={s.id} className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-[#2563EB] text-white text-[12px] font-bold flex items-center justify-center shrink-0">
+                            {s.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-medium text-[#111827] truncate">{s.name}</p>
+                            <p className="text-[11px] text-[#9AA0AB] truncate">{s.email}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-5 pt-4 border-t border-[#F3F4F6]">
+                    <Link href="/gestor/equipe" className="text-[13px] text-[#2563EB] font-medium hover:underline">Ver equipe →</Link>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-        {/* Row 2 */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <TradoxTable
-            title="Top Vendedores"
-            columns={[
-              { key: "seller", label: "Vendedor" },
-              { key: "conversions", label: "Conversões", align: "center" },
-              { key: "rate", label: "Taxa", align: "right" },
-            ]}
-            rows={[
-              {
-                id: "s2",
-                avatar: { text: "MS", color: "#2563EB" },
-                title: "Maria Santos",
-                subtitle: "15 desejos · 10 matches",
-                cells: {
-                  conversions: <span className="font-bold text-[#111827]">4</span>,
-                  rate: (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--primary)]">
-                      26.7%
-                    </span>
-                  ),
-                },
-                action: { label: "Detalhes" },
-                pinned: true,
-              },
-              {
-                id: "s1",
-                avatar: { text: "JS", color: "#3B82F6" },
-                title: "João Silva",
-                subtitle: "12 desejos · 8 matches",
-                cells: {
-                  conversions: <span className="font-bold text-[#111827]">3</span>,
-                  rate: (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--primary)]">
-                      25.0%
-                    </span>
-                  ),
-                },
-                action: { label: "Detalhes" },
-              },
-              {
-                id: "s3",
-                avatar: { text: "CO", color: "#60A5FA" },
-                title: "Carlos Oliveira",
-                subtitle: "10 desejos · 9 matches",
-                cells: {
-                  conversions: <span className="font-bold text-[#111827]">2</span>,
-                  rate: (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
-                      20.0%
-                    </span>
-                  ),
-                },
-                action: { label: "Detalhes" },
-              },
-              {
-                id: "s4",
-                avatar: { text: "AS", color: "#93C5FD" },
-                title: "Ana Souza",
-                subtitle: "10 desejos · 7 matches",
-                cells: {
-                  conversions: <span className="font-bold text-[#111827]">1</span>,
-                  rate: (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-[#E5484D]">
-                      10.0%
-                    </span>
-                  ),
-                },
-                action: { label: "Detalhes" },
-              },
-            ]}
-          />
-
-          <TradoxTable
-            title="Modelos Mais Procurados Sem Estoque"
-            columns={[
-              { key: "model", label: "Modelo" },
-              { key: "wishes", label: "Desejos", align: "center" },
-              { key: "trend", label: "Tendência", align: "right" },
-            ]}
-            rows={[
-              {
-                id: "t1",
-                avatar: { text: "H", color: "#E40521" },
-                title: "Honda Civic",
-                subtitle: "2021–2024 · Automático",
-                cells: {
-                  wishes: <span className="font-bold text-[#111827]">8</span>,
-                  trend: (
-                    <span className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-[var(--primary)]">
-                      +3 esta semana
-                    </span>
-                  ),
-                },
-                action: { label: "Ver" },
-              },
-              {
-                id: "t2",
-                avatar: { text: "T", color: "#1A1A1A" },
-                title: "Toyota Corolla",
-                subtitle: "2020–2024 · Flex",
-                cells: {
-                  wishes: <span className="font-bold text-[#111827]">7</span>,
-                  trend: (
-                    <span className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-[var(--primary)]">
-                      +2 esta semana
-                    </span>
-                  ),
-                },
-                action: { label: "Ver" },
-              },
-              {
-                id: "t3",
-                avatar: { text: "J", color: "#3D5A1E" },
-                title: "Jeep Compass",
-                subtitle: "2020–2023 · Diesel",
-                cells: {
-                  wishes: <span className="font-bold text-[#111827]">6</span>,
-                  trend: (
-                    <span className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-[#9AA0AB]">
-                      sem alteração
-                    </span>
-                  ),
-                },
-                action: { label: "Ver" },
-              },
-              {
-                id: "t4",
-                avatar: { text: "V", color: "#001E50" },
-                title: "VW T-Cross",
-                subtitle: "2021–2024 · Automático",
-                cells: {
-                  wishes: <span className="font-bold text-[#111827]">5</span>,
-                  trend: (
-                    <span className="inline-flex items-center gap-0.5 text-[12px] font-semibold text-[var(--primary)]">
-                      +1 esta semana
-                    </span>
-                  ),
-                },
-                action: { label: "Ver" },
-              },
-            ]}
-          />
-        </div>
+            {!hasData && (
+              <div className="card-tradox text-center py-16">
+                <BarChart3 className="w-12 h-12 mx-auto text-[#D1D5DB] mb-4" />
+                <h3 className="text-[16px] font-semibold text-[#111827] mb-2">Nenhum desejo cadastrado ainda</h3>
+                <p className="text-[14px] text-[#6B7280] max-w-md mx-auto">
+                  Os números e relatórios aparecerão aqui conforme sua equipe começar a registrar desejos de compra dos clientes.
+                </p>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

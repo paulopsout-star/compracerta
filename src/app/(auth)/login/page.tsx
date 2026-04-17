@@ -175,16 +175,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Single stat chip — bottom */}
-        <div className="relative z-10">
-          <div className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-white/[0.04] backdrop-blur-sm border border-white/[0.06]">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3B82F6] opacity-60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#3B82F6]" />
-            </span>
-            <span className="text-[13px] text-white/50 font-medium">+12.500 veículos ativos na rede</span>
-          </div>
-        </div>
       </div>
 
       {/* ─── FORM (focused, clean) ─── */}
