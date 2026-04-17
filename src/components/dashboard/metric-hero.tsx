@@ -62,10 +62,10 @@ export function MetricHero({
         {label}
       </p>
 
-      <div className="flex items-end justify-between mt-3">
+      <div className="flex items-end justify-between mt-4">
         <div>
-          <div className="flex items-center gap-3">
-            <span className="text-[40px] md:text-[48px] font-bold text-[#111827] leading-none">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-[36px] md:text-[44px] font-bold text-[#111827] leading-none">
               {value}
             </span>
             <span
@@ -85,7 +85,7 @@ export function MetricHero({
               {trend.value}%
             </span>
           </div>
-          <p className="text-[13px] text-[#9AA0AB] mt-2">{subtitle}</p>
+          <p className="text-[13px] text-[#9AA0AB] mt-3">{subtitle}</p>
         </div>
 
         <Sparkline data={sparklineData} className="hidden sm:block" />

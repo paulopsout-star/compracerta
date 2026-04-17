@@ -28,7 +28,7 @@ export function Header({
   const displayGreeting = greeting ?? `${autoGreeting}, ${userName}!`;
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-4 h-[72px] px-4 md:px-8 bg-background">
+    <header className="sticky top-0 z-30 flex items-center gap-3 md:gap-6 h-[72px] px-4 md:px-8 bg-background">
       {/* Mobile toggle */}
       <button
         onClick={onMenuToggle}
@@ -48,7 +48,7 @@ export function Header({
       <div className="flex-1" />
 
       {/* Search — TradoX pill shape */}
-      <div className="hidden md:block w-full max-w-[320px]">
+      <div className="hidden lg:block w-full max-w-[280px]">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9AA0AB]" />
           <input
@@ -60,7 +60,7 @@ export function Header({
       </div>
 
       {/* Icon cluster — TradoX right side */}
-      <div className="flex items-center gap-2 ml-4">
+      <div className="flex items-center gap-2.5 ml-3 shrink-0">
         <button className="flex items-center justify-center w-10 h-10 rounded-full bg-[#1A1D23] text-white hover:bg-[#2A2E35] transition-colors">
           <MessageSquare className="h-[18px] w-[18px]" />
         </button>
