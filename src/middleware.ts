@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/", "/login", "/api/auth", "/api/admin/rematch-all"];
+const PUBLIC_PATHS = ["/", "/login", "/api/auth"];
 
 const ROLE_PATHS: Record<string, string[]> = {
   vendedor: ["/vendedor", "/desejos"],

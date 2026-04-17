@@ -1,25 +1,21 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish } from "@/lib/services/avaliador-api";
 import type { Wish, Offer } from "@/types";
 
 /**
- * ONE-OFF admin utility — re-executes matching for ALL active wishes.
- * Useful after matching rules change (e.g. including "Comprado" status).
- *
- * Security: requires X-Rematch-Secret header matching env var (or public
- * in absence of env var for one-time ops). Rate-limited to 1 call/5min.
+ * Admin utility — re-executes matching for ALL active wishes.
+ * Useful after matching rules change (e.g. including new statuses).
+ * Requires admin role.
  */
 
-export async function POST(request: Request) {
-  const providedSecret = request.headers.get("x-rematch-secret");
-  const expectedSecret = process.env.REMATCH_SECRET?.trim();
-
-  // If REMATCH_SECRET is set, require it. Otherwise allow (one-off).
-  if (expectedSecret && providedSecret !== expectedSecret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export async function POST() {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const role = (session.user as Record<string, unknown>).role as string;
+  if (role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
 
   // Load active wishes
   const { data: wishRows, error } = await supabase
