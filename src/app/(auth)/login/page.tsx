@@ -3,22 +3,62 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { signIn } from "next-auth/react";
+import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError("E-mail ou senha incorretos");
       setLoading(false);
-      router.push("/vendedor");
-    }, 1000);
+      return;
+    }
+
+    // Fetch session to get role and redirect
+    const res = await fetch("/api/auth/session");
+    const session = await res.json();
+    const role = session?.user?.role ?? "vendedor";
+    router.push(`/${role}`);
+    router.refresh();
+  }
+
+  async function handleDemoLogin(demoEmail: string) {
+    setLoading(true);
+    setError("");
+    const result = await signIn("credentials", {
+      email: demoEmail,
+      password: "123456",
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError("Erro no login demo");
+      setLoading(false);
+      return;
+    }
+
+    const res = await fetch("/api/auth/session");
+    const session = await res.json();
+    const role = session?.user?.role ?? "vendedor";
+    router.push(`/${role}`);
+    router.refresh();
   }
 
   return (
@@ -47,6 +87,13 @@ export default function LoginPage() {
               Use suas credenciais do Canal do Repasse
             </p>
           </div>
+
+          {error && (
+            <div className="flex items-center gap-2 p-3 mb-4 rounded-[10px] bg-red-50 text-[13px] text-[#E5484D]">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
@@ -104,22 +151,23 @@ export default function LoginPage() {
           {/* Demo access */}
           <div className="mt-6 pt-5 border-t border-[#EEF0F3]">
             <p className="text-[12px] text-center text-[#9AA0AB] mb-3">
-              Acesso rápido para demonstração
+              Acesso demo (senha: 123456)
             </p>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "Vendedor", href: "/vendedor" },
-                { label: "Gestor", href: "/gestor" },
-                { label: "Lojista", href: "/lojista" },
-                { label: "Admin", href: "/admin" },
+                { label: "Vendedor", email: "vendedor@compracerta.com" },
+                { label: "Gestor", email: "gestor@compracerta.com" },
+                { label: "Lojista", email: "lojista@compracerta.com" },
+                { label: "Admin", email: "admin@compracerta.com" },
               ].map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="h-[36px] rounded-[8px] border border-[#E8EAEE] text-[13px] font-medium text-[#5B6370] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors flex items-center justify-center"
+                <button
+                  key={item.email}
+                  onClick={() => handleDemoLogin(item.email)}
+                  disabled={loading}
+                  className="h-[36px] rounded-[8px] border border-[#E8EAEE] text-[13px] font-medium text-[#5B6370] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors disabled:opacity-50"
                 >
                   {item.label}
-                </Link>
+                </button>
               ))}
             </div>
           </div>
