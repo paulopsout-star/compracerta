@@ -37,14 +37,14 @@ export function DashboardLayout({
       </Sheet>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header
           userName={userName}
           greeting={greeting}
           subtitle={subtitle}
           onMenuToggle={() => setMobileOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto px-4 md:px-8 pb-8">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-6 lg:px-8 pb-8 min-w-0">
           {children}
         </main>
       </div>

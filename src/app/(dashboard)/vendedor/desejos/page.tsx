@@ -82,25 +82,26 @@ export default function MeusDesejosPage() {
           </div>
         ) : (
           <>
-            {/* ─── Desktop ≥1024px: List view (grid with fixed px for secondary cols) ─── */}
-            <div className="card-tradox !p-0 overflow-hidden hidden lg:block w-full">
-              {/* Grid: Veiculo absorve o resto, outras colunas com px fixos que comportam o conteudo inteiro */}
-              {/* Larguras secundarias: Cliente 110 | Ano 78 | Preço 168 | KM 108 | Data 82 | Status 124 | Acoes 80 */}
-              {/* Total fixo: 110+78+168+108+82+124+80 = 750px + veiculo min 180 = 930px minimo */}
-
+            {/* ─── Desktop ≥1024px: List view (grid com larguras compactas) ─── */}
+            {/* Soma larguras fixas: Cliente 92 + Ano 64 + Preço 150 + KM 96 + Data 74 + Status 108 + Ações 68 = 652 */}
+            {/* + Veículo minmax(140,1fr) + 7 gaps (6px=42) + padding horizontal (24) = 858px mínimo */}
+            {/* Cabe confortavelmente em qualquer lg (≥1024px) */}
+            <div className="card-tradox !p-0 overflow-hidden hidden lg:block w-full min-w-0 max-w-full">
               {/* Header */}
               <div
-                className="grid gap-2 px-4 py-3 bg-[#F7F8FA] border-b border-[#EEF0F3] items-center"
-                style={{ gridTemplateColumns: "minmax(180px, 1fr) 110px 78px 168px 108px 82px 124px 80px" }}
+                className="grid gap-1.5 px-3 py-3 bg-[#F7F8FA] border-b border-[#EEF0F3] items-center w-full max-w-full"
+                style={{
+                  gridTemplateColumns: "minmax(140px, 1fr) 92px 64px 150px 96px 74px 108px 68px",
+                }}
               >
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0">Veículo</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0">Cliente</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0">Ano</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0">Preço</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0">KM</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0">Data</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0">Status</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0">Ações</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Veículo</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Cliente</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Ano</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">Preço</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">KM</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Data</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Status</span>
+                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">Ações</span>
               </div>
 
               {/* Rows */}
@@ -127,64 +128,66 @@ export default function MeusDesejosPage() {
                   return (
                     <div
                       key={w.id as string}
-                      className="grid gap-2 px-4 items-center min-h-[64px] hover:bg-[#FAFBFC] transition-colors"
-                      style={{ gridTemplateColumns: "minmax(180px, 1fr) 110px 78px 168px 108px 82px 124px 80px" }}
+                      className="grid gap-1.5 px-3 items-center min-h-[60px] hover:bg-[#FAFBFC] transition-colors w-full max-w-full"
+                      style={{
+                        gridTemplateColumns: "minmax(140px, 1fr) 92px 64px 150px 96px 74px 108px 68px",
+                      }}
                     >
-                      {/* Veículo — único bloco que pode truncar */}
+                      {/* Veículo — único bloco que pode encolher/truncar */}
                       <div className="min-w-0 overflow-hidden">
-                        <p className="text-[13px] font-semibold text-[#111827] leading-snug truncate" title={`${w.brand} ${w.model}`}>
+                        <p className="text-[13px] font-semibold text-[#111827] leading-tight truncate" title={`${w.brand} ${w.model}`}>
                           {w.brand as string} {w.model as string}
                         </p>
-                        <p className="text-[11px] text-[#9AA0AB] leading-snug mt-0.5 truncate" title={(w.version as string) || undefined}>
+                        <p className="text-[11px] text-[#9AA0AB] leading-tight mt-0.5 truncate" title={(w.version as string) || undefined}>
                           {w.version ? (w.version as string) : "—"}
                         </p>
                       </div>
 
-                      {/* Cliente — truncate */}
+                      {/* Cliente */}
                       <div className="min-w-0 overflow-hidden">
-                        <p className="text-[13px] text-[#111827] truncate" title={w.client_name as string}>
+                        <p className="text-[12px] text-[#111827] truncate" title={w.client_name as string}>
                           {w.client_name as string}
                         </p>
                       </div>
 
-                      {/* Ano — cabe inteiro */}
-                      <div className="text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap">
+                      {/* Ano */}
+                      <div className="text-[12px] text-[#5B6370] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
                         {yearDisplay}
                       </div>
 
-                      {/* Preço — cabe inteiro (168px para "R$ 110.000–R$ 150.000") */}
-                      <div className="text-right text-[12px] text-[#111827] tabular-nums whitespace-nowrap">
+                      {/* Preço */}
+                      <div className="text-right text-[11px] text-[#111827] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis" title={priceDisplay}>
                         {priceDisplay}
                       </div>
 
-                      {/* KM — cabe inteiro */}
-                      <div className="text-right text-[12px] text-[#5B6370] tabular-nums whitespace-nowrap">
+                      {/* KM */}
+                      <div className="text-right text-[11px] text-[#5B6370] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
                         {kmDisplay}
                       </div>
 
-                      {/* Data — cabe inteiro */}
-                      <div className="text-[12px] text-[#5B6370] tabular-nums whitespace-nowrap">
+                      {/* Data */}
+                      <div className="text-[11px] text-[#5B6370] tabular-nums whitespace-nowrap overflow-hidden text-ellipsis">
                         {dateDisplay}
                       </div>
 
-                      {/* Status — 2 badges cabem lado a lado */}
-                      <div className="flex items-center justify-center gap-1 whitespace-nowrap">
+                      {/* Status */}
+                      <div className="flex items-center justify-center gap-1 whitespace-nowrap overflow-hidden">
                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${s.cls}`}>{s.label}</span>
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${u.cls}`}>{u.label}</span>
+                        <span className={`inline-flex items-center px-1 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${u.cls}`}>{u.label}</span>
                       </div>
 
-                      {/* Ações — botão Ver + menu ··· */}
-                      <div className="flex items-center justify-end gap-1 whitespace-nowrap overflow-visible">
+                      {/* Ações */}
+                      <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                         <Link
                           href="/vendedor/matches"
-                          className="h-[28px] px-2.5 rounded-[6px] bg-[#2563EB] text-white text-[11px] font-semibold inline-flex items-center hover:brightness-90 transition-all whitespace-nowrap"
+                          className="h-[26px] px-2 rounded-[6px] bg-[#2563EB] text-white text-[11px] font-semibold inline-flex items-center hover:brightness-90 transition-all"
                         >
                           Ver
                         </Link>
                         <div className="relative">
                           <button
                             onClick={() => setOpenMenu(openMenu === (w.id as string) ? null : (w.id as string))}
-                            className="w-[28px] h-[28px] flex items-center justify-center rounded-md text-[#C1C7D0] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-all"
+                            className="w-[26px] h-[26px] flex items-center justify-center rounded-md text-[#C1C7D0] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-all"
                           >
                             <MoreHorizontal className="w-4 h-4" />
                           </button>
