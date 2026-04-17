@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
+import { fetchAllExternalOffers } from "@/lib/services/external-sources";
 import type { Wish, Offer } from "@/types";
 
 function dbWishToType(row: Record<string, unknown>): Wish {
@@ -70,15 +71,23 @@ export async function POST(request: NextRequest) {
     const { data: wishRows, error: wErr } = await wishQuery;
     if (wErr) throw wErr;
 
-    // Fetch active offers
+    // Fetch active offers from Supabase (lojistas + synced cache)
     const { data: offerRows, error: oErr } = await supabase
       .from("offers")
       .select("*")
       .eq("active", true);
     if (oErr) throw oErr;
 
+    // Fetch offers from external SQL Server sources (marketplace + avaliador)
+    // Circuit breaker inside — returns empty arrays if unavailable
+    const { marketplace, avaliador } = await fetchAllExternalOffers();
+
     const wishes = (wishRows ?? []).map(dbWishToType);
-    const offers = (offerRows ?? []).map(dbOfferToType);
+    const offers: Offer[] = [
+      ...(offerRows ?? []).map(dbOfferToType),
+      ...marketplace,
+      ...avaliador,
+    ];
 
     let newMatches = 0;
     let notifications = 0;
@@ -88,12 +97,42 @@ export async function POST(request: NextRequest) {
         const result = calculateMatchScore(wish, offer);
         if (result.score < MATCH_THRESHOLDS.SUGGESTION) continue;
 
+        // External offers (marketplace/avaliador) come from SQL Server.
+        // Upsert them into the Supabase `offers` table so FK in matches works.
+        let offerId = offer.id;
+        if (offer.source !== "estoque_lojista") {
+          const { data: upserted } = await supabase
+            .from("offers")
+            .upsert(
+              {
+                source: offer.source,
+                source_id: offer.sourceId,
+                plate: offer.plate ?? null,
+                brand: offer.brand,
+                model: offer.model,
+                version: offer.version ?? null,
+                year: offer.year,
+                km: offer.km,
+                color: offer.color ?? null,
+                price: offer.price,
+                city: offer.city,
+                state: offer.state,
+                active: true,
+                synced_at: new Date().toISOString(),
+              },
+              { onConflict: "source,source_id" }
+            )
+            .select("id")
+            .single();
+          if (upserted) offerId = upserted.id as string;
+        }
+
         // Check if match already exists
         const { data: existing } = await supabase
           .from("matches")
           .select("id")
           .eq("wish_id", wish.id)
-          .eq("offer_id", offer.id)
+          .eq("offer_id", offerId)
           .maybeSingle();
 
         if (existing) continue;
@@ -102,7 +141,7 @@ export async function POST(request: NextRequest) {
         const status = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
         await insert("matches", {
           wish_id: wish.id,
-          offer_id: offer.id,
+          offer_id: offerId,
           score: result.score,
           status,
         });
@@ -122,7 +161,7 @@ export async function POST(request: NextRequest) {
             .from("matches")
             .select("id")
             .eq("wish_id", wish.id)
-            .eq("offer_id", offer.id)
+            .eq("offer_id", offerId)
             .single();
 
           if (matchRow) {
@@ -136,6 +175,18 @@ export async function POST(request: NextRequest) {
               sent_at: new Date().toISOString(),
             });
             notifications++;
+          }
+
+          // Writeback to Avaliador Digital if offer came from there
+          if (offer.source === "avaliador") {
+            import("@/lib/services/external-sources").then(({ notifyAvaliadorOfMatch }) => {
+              notifyAvaliadorOfMatch({
+                veiculoId: offer.sourceId,
+                desejoId: wish.id,
+                vendedorNome: wish.clientName ?? "Vendedor",
+                unidadesCount: 1,
+              }).catch(() => {});
+            });
           }
         }
       }
