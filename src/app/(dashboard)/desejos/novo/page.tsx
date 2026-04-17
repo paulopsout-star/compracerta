@@ -1,9 +1,35 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { WishForm } from "@/components/forms/wish-form";
+import type { WishFormData } from "@/lib/validators/wish";
 
 export default function NovoDesejoPage() {
+  const router = useRouter();
+
+  async function handleSubmit(data: WishFormData) {
+    const res = await fetch("/api/desejos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error ?? "Erro ao cadastrar desejo");
+    }
+
+    // Trigger matching after creation
+    fetch("/api/matching", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }).catch(() => {});
+
+    router.push("/vendedor/desejos");
+  }
+
   return (
     <DashboardLayout role="vendedor" subtitle="Cadastre o veículo que seu cliente procura">
       <div className="max-w-3xl mx-auto">
@@ -14,7 +40,7 @@ export default function NovoDesejoPage() {
             e notificará você quando encontrar um match.
           </p>
         </div>
-        <WishForm />
+        <WishForm onSubmit={handleSubmit} />
       </div>
     </DashboardLayout>
   );
