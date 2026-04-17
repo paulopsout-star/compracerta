@@ -103,9 +103,13 @@ export async function POST(request: NextRequest) {
 
     const immediateMatches: ImmediateMatch[] = [];
     try {
+      console.log(`[Desejo] Novo desejo ${wish.id}: ${wish.brand} ${wish.model}, UF=${wish.stateRef}, cidade=${wish.cityRef}, kmMax=${wish.kmMax}`);
+
       // Fetch local offers (lojistas) + external (Avaliador Digital)
       const { data: localOffers } = await supabase.from("offers").select("*").eq("active", true);
       const external = await fetchExternalOffersForWish(wish);
+
+      console.log(`[Desejo] Ofertas: ${(localOffers ?? []).length} locais + ${external.length} externas = ${(localOffers ?? []).length + external.length} total`);
 
       const allOffers: Offer[] = [
         ...((localOffers ?? []).map((r: Record<string, unknown>): Offer => ({

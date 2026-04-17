@@ -19,6 +19,8 @@ interface AvaliadorVehicle {
   cor: string | null;
   ano_fabricacao: string;
   ano_modelo: string;
+  valor_fipe?: number;
+  valor_desejado?: number;
   status: string;
   data_atualizacao: string;
   cidade: string;
@@ -45,10 +47,17 @@ function cacheKey(params: Record<string, string | number | undefined>): string {
 }
 
 function vehicleToOffer(v: AvaliadorVehicle, index: number): Offer {
-  // API doesn't return id nor price — synthesize a stable id from core fields
+  // API doesn't return id — synthesize a stable id from core fields
   const syntheticId = `${v.marca}-${v.modelo}-${v.km}-${v.ano_modelo}-${v.cidade}-${v.uf}-${index}`
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "");
+
+  // Price: prefer FIPE value (avoids 0), fallback to valor_desejado, then 0
+  const price = v.valor_fipe && v.valor_fipe > 0
+    ? v.valor_fipe
+    : v.valor_desejado && v.valor_desejado > 0
+    ? v.valor_desejado
+    : 0;
 
   return {
     id: `av-${syntheticId}`,
@@ -59,7 +68,7 @@ function vehicleToOffer(v: AvaliadorVehicle, index: number): Offer {
     year: parseInt(v.ano_modelo) || parseInt(v.ano_fabricacao) || 0,
     km: parseInt(v.km) || 0,
     color: v.cor?.trim() || undefined,
-    price: 0, // API doesn't expose price — will need negotiation at contact time
+    price,
     city: v.cidade.trim(),
     state: v.uf.trim().toUpperCase(),
     active: true,
@@ -75,12 +84,18 @@ async function fetchAvaliadorRaw(params: {
   cidade?: string;
   uf?: string;
 }): Promise<Offer[]> {
-  if (process.env.AVALIADOR_API_ENABLED !== "true") return [];
+  if (process.env.AVALIADOR_API_ENABLED !== "true") {
+    console.log("[Avaliador API] Skipped — AVALIADOR_API_ENABLED not 'true'");
+    return [];
+  }
 
   const baseUrl = process.env.AVALIADOR_API_URL || DEFAULT_BASE_URL;
   const key = cacheKey(params);
   const cached = cache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  if (cached && cached.expiresAt > Date.now()) {
+    console.log(`[Avaliador API] Cache hit for ${params.modelo} (${cached.data.length} offers)`);
+    return cached.data;
+  }
 
   const url = new URL(`${baseUrl}/API/V1/Get/ConsultaPublica`);
   url.searchParams.set("modelo", params.modelo);
@@ -89,30 +104,36 @@ async function fetchAvaliadorRaw(params: {
   if (params.cidade) url.searchParams.set("cidade", params.cidade);
   if (params.uf) url.searchParams.set("uf", params.uf);
 
+  console.log(`[Avaliador API] GET ${url.toString()}`);
+
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const timeout = setTimeout(() => controller.abort(), 15_000);
 
     const res = await fetch(url.toString(), {
       method: "GET",
       signal: controller.signal,
       headers: { Accept: "application/json" },
-      next: { revalidate: 300 },
+      cache: "no-store",
     });
     clearTimeout(timeout);
 
+    console.log(`[Avaliador API] Status ${res.status}`);
     if (!res.ok) {
       console.error(`[Avaliador API] HTTP ${res.status}`);
       return [];
     }
 
     const body = (await res.json()) as AvaliadorResponse;
+    console.log(`[Avaliador API] Response: success=${body.success}, qtd=${body.data?.length ?? 0}`);
+
     if (!body.success || !Array.isArray(body.data)) return [];
 
     const offers = body.data
       .filter((v) => ["Publicado", "Avaliado", "Pendente"].includes(v.status))
       .map(vehicleToOffer);
 
+    console.log(`[Avaliador API] ${offers.length} active offers after filter`);
     cache.set(key, { data: offers, expiresAt: Date.now() + CACHE_TTL_MS });
     return offers;
   } catch (error) {
