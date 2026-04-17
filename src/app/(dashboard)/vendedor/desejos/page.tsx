@@ -85,17 +85,27 @@ export default function MeusDesejosPage() {
             {/* ─── Desktop / Tablet: List view (table) ─── */}
             <div className="card-tradox !p-0 overflow-hidden hidden md:block">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[860px]">
+                <table className="w-full min-w-[1080px]" style={{ tableLayout: "fixed" }}>
+                  <colgroup>
+                    <col style={{ width: "22%" }} /> {/* Veículo */}
+                    <col style={{ width: "12%" }} /> {/* Cliente */}
+                    <col style={{ width: "9%" }} />  {/* Ano */}
+                    <col style={{ width: "17%" }} /> {/* Preço */}
+                    <col style={{ width: "11%" }} /> {/* KM */}
+                    <col style={{ width: "9%" }} />  {/* Data */}
+                    <col style={{ width: "10%" }} /> {/* Status */}
+                    <col style={{ width: "10%" }} /> {/* Ações */}
+                  </colgroup>
                   <thead>
                     <tr className="bg-[#F7F8FA] border-b border-[#EEF0F3]">
-                      <th className="text-left pl-5 pr-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] min-w-[220px]">Veículo</th>
-                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] min-w-[140px]">Cliente</th>
-                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] min-w-[90px]">Ano</th>
-                      <th className="text-right px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] min-w-[140px]">Preço</th>
-                      <th className="text-right px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] min-w-[110px]">KM</th>
-                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] min-w-[90px]">Data</th>
-                      <th className="text-center px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] min-w-[150px]">Status</th>
-                      <th className="text-right pl-3 pr-5 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] min-w-[180px]">Ações</th>
+                      <th className="text-left pl-5 pr-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Veículo</th>
+                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Cliente</th>
+                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Ano</th>
+                      <th className="text-right px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Preço</th>
+                      <th className="text-right px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">KM</th>
+                      <th className="text-left px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Data</th>
+                      <th className="text-center px-3 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Status</th>
+                      <th className="text-right pl-3 pr-5 py-3 text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.5px] whitespace-nowrap">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#F3F4F6]">
@@ -109,26 +119,28 @@ export default function MeusDesejosPage() {
                       const kMax = w.km_max as number | null;
                       const isActive = ["procurando", "match_encontrado"].includes(w.status as string);
                       return (
-                        <tr key={w.id as string} className="hover:bg-[#FAFBFC] transition-colors group">
-                          {/* Veículo */}
-                          <td className="pl-5 pr-3 py-3.5">
-                            <p className="text-[13px] font-semibold text-[#111827] leading-snug">{w.brand as string} {w.model as string}</p>
-                            {w.version ? (
-                              <p className="text-[11px] text-[#9AA0AB] leading-snug mt-0.5 truncate max-w-[260px]">{w.version as string}</p>
-                            ) : (
-                              <p className="text-[11px] text-[#9AA0AB] leading-snug mt-0.5">—</p>
-                            )}
+                        <tr key={w.id as string} className="h-[64px] hover:bg-[#FAFBFC] transition-colors group align-middle">
+                          {/* Veículo — única coluna que permite quebra (título + subtexto) */}
+                          <td className="pl-5 pr-3 align-middle">
+                            <p className="text-[13px] font-semibold text-[#111827] leading-snug truncate" title={`${w.brand} ${w.model}`}>
+                              {w.brand as string} {w.model as string}
+                            </p>
+                            <p className="text-[11px] text-[#9AA0AB] leading-snug mt-0.5 truncate" title={(w.version as string) || undefined}>
+                              {w.version ? (w.version as string) : "—"}
+                            </p>
                           </td>
                           {/* Cliente */}
-                          <td className="px-3 py-3.5">
-                            <p className="text-[13px] text-[#111827] truncate max-w-[160px]">{w.client_name as string}</p>
+                          <td className="px-3 align-middle">
+                            <p className="text-[13px] text-[#111827] truncate whitespace-nowrap" title={w.client_name as string}>
+                              {w.client_name as string}
+                            </p>
                           </td>
                           {/* Ano */}
-                          <td className="px-3 py-3.5 text-[13px] text-[#5B6370] tabular-nums">
+                          <td className="px-3 align-middle text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap">
                             {yMin && yMax ? (yMin === yMax ? yMin : `${yMin}–${yMax}`) : "—"}
                           </td>
                           {/* Preço */}
-                          <td className="px-3 py-3.5 text-right text-[13px] text-[#111827] tabular-nums">
+                          <td className="px-3 align-middle text-right text-[13px] text-[#111827] tabular-nums whitespace-nowrap">
                             {pMin && pMax
                               ? <span>{fmt(pMin)} <span className="text-[#9AA0AB]">–</span> {fmt(pMax)}</span>
                               : pMax ? fmt(pMax)
@@ -136,23 +148,23 @@ export default function MeusDesejosPage() {
                               : <span className="text-[#9AA0AB]">—</span>}
                           </td>
                           {/* KM */}
-                          <td className="px-3 py-3.5 text-right text-[13px] text-[#5B6370] tabular-nums">
+                          <td className="px-3 align-middle text-right text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap">
                             {kMax ? `até ${kMax.toLocaleString("pt-BR")} km` : <span className="text-[#9AA0AB]">—</span>}
                           </td>
                           {/* Data */}
-                          <td className="px-3 py-3.5 text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap">
+                          <td className="px-3 align-middle text-[13px] text-[#5B6370] tabular-nums whitespace-nowrap">
                             {new Date(w.created_at as string).toLocaleDateString("pt-BR")}
                           </td>
                           {/* Status (com urgência ao lado) */}
-                          <td className="px-3 py-3.5">
-                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${s.cls}`}>{s.label}</span>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${u.cls}`}>{u.label}</span>
+                          <td className="px-3 align-middle whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${s.cls} whitespace-nowrap`}>{s.label}</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${u.cls} whitespace-nowrap`}>{u.label}</span>
                             </div>
                           </td>
                           {/* Ações */}
-                          <td className="pl-3 pr-5 py-3.5">
-                            <div className="flex items-center justify-end gap-1.5">
+                          <td className="pl-3 pr-5 align-middle">
+                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                               <Link
                                 href="/vendedor/matches"
                                 className="h-[30px] px-3 rounded-[7px] bg-[#2563EB] text-white text-[11px] font-semibold inline-flex items-center hover:brightness-90 transition-all whitespace-nowrap"
