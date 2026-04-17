@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Zap, Loader2, MapPin } from "lucide-react";
+import { Zap, Loader2, MapPin, X, ArrowLeft } from "lucide-react";
 
 function fmt(v: number) { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v); }
 
@@ -11,20 +13,92 @@ const SOURCE_LABEL: Record<string, { label: string; cls: string }> = {
   estoque_lojista: { label: "Lojista", cls: "bg-green-50 text-green-700" },
 };
 
-export default function MatchesPage() {
+function MatchesContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const wishId = searchParams.get("wishId");
+
   const [matches, setMatches] = useState<Record<string, unknown>[]>([]);
+  const [wishInfo, setWishInfo] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/matching").then(r => r.json()).then(d => setMatches(d.data ?? [])).finally(() => setLoading(false));
-  }, []);
+    const url = wishId ? `/api/matching?wishId=${encodeURIComponent(wishId)}` : "/api/matching";
+    fetch(url).then(r => r.json()).then(d => setMatches(d.data ?? [])).finally(() => setLoading(false));
+
+    if (wishId) {
+      fetch(`/api/desejos/${wishId}`).then(r => r.json()).then(d => setWishInfo(d ?? null)).catch(() => {});
+    } else {
+      setWishInfo(null);
+    }
+  }, [wishId]);
+
+  const subtitle = wishId && wishInfo
+    ? `Matches para ${wishInfo.brand as string} ${wishInfo.model as string}`
+    : "Veículos encontrados para seus clientes";
+
+  function clearFilter() {
+    router.push("/vendedor/matches");
+  }
 
   return (
-    <DashboardLayout role="vendedor" subtitle="Veículos encontrados para seus clientes">
+    <DashboardLayout role="vendedor" subtitle={subtitle}>
       <div className="space-y-6">
-        <div className="flex items-center gap-3"><Zap className="w-5 h-5 text-[#2563EB]" /><h2 className="text-[20px] font-semibold text-[#111827]">Meus Matches</h2><span className="text-[13px] text-[#9AA0AB]">{matches.length}</span></div>
-        {loading ? <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-[#9AA0AB]" /></div> : matches.length === 0 ? (
-          <div className="card-tradox text-center py-12"><Zap className="w-12 h-12 mx-auto text-[#9AA0AB] mb-4" /><h3 className="text-[16px] font-semibold text-[#111827] mb-2">Nenhum match ainda</h3><p className="text-[14px] text-[#5B6370]">O motor de matching está buscando veículos para seus clientes.</p></div>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <Zap className="w-5 h-5 text-[#2563EB]" />
+            <h2 className="text-[20px] font-semibold text-[#111827]">
+              {wishId && wishInfo ? `Matches de ${wishInfo.brand} ${wishInfo.model}` : "Meus Matches"}
+            </h2>
+            <span className="text-[13px] text-[#9AA0AB]">{matches.length}</span>
+          </div>
+
+          {/* Filter indicator + clear button */}
+          {wishId && (
+            <div className="flex items-center gap-2">
+              <div className="inline-flex items-center gap-2 h-[32px] pl-3 pr-1 rounded-full bg-[rgba(37,99,235,0.08)] text-[#2563EB] text-[12px] font-medium">
+                <span>
+                  {wishInfo ? (
+                    <>
+                      Filtrado por: <span className="font-semibold">{wishInfo.client_name as string}</span>
+                    </>
+                  ) : (
+                    "Filtrado"
+                  )}
+                </span>
+                <button
+                  onClick={clearFilter}
+                  className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[rgba(37,99,235,0.15)] transition-colors"
+                  aria-label="Limpar filtro"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <Link
+                href="/vendedor/desejos"
+                className="inline-flex items-center gap-1.5 h-[32px] px-3 rounded-[8px] border border-[#E8EAEE] text-[12px] font-medium text-[#5B6370] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Voltar aos desejos
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-[#9AA0AB]" /></div>
+        ) : matches.length === 0 ? (
+          <div className="card-tradox text-center py-12">
+            <Zap className="w-12 h-12 mx-auto text-[#9AA0AB] mb-4" />
+            <h3 className="text-[16px] font-semibold text-[#111827] mb-2">
+              {wishId ? "Nenhum match para este desejo ainda" : "Nenhum match ainda"}
+            </h3>
+            <p className="text-[14px] text-[#5B6370]">
+              {wishId
+                ? "O motor de matching continua rodando. Você será notificado assim que aparecer um veículo compatível."
+                : "O motor de matching está buscando veículos para seus clientes."}
+            </p>
+          </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {matches.map((m) => {
@@ -56,5 +130,17 @@ export default function MatchesPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function MatchesPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout role="vendedor" subtitle="Carregando matches">
+        <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-[#9AA0AB]" /></div>
+      </DashboardLayout>
+    }>
+      <MatchesContent />
+    </Suspense>
   );
 }

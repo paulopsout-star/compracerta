@@ -179,7 +179,7 @@ export default function MeusDesejosPage() {
                       {/* Ações */}
                       <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                         <Link
-                          href="/vendedor/matches"
+                          href={`/vendedor/matches?wishId=${encodeURIComponent(w.id as string)}`}
                           className="h-[26px] px-2 rounded-[6px] bg-[#2563EB] text-white text-[11px] font-semibold inline-flex items-center hover:brightness-90 transition-all"
                         >
                           Ver
@@ -196,7 +196,7 @@ export default function MeusDesejosPage() {
                               <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
                               <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-[10px] shadow-lg shadow-black/10 border border-[#EEF0F3] py-1.5 min-w-[180px]">
                                 <Link
-                                  href="/vendedor/matches"
+                                  href={`/vendedor/matches?wishId=${encodeURIComponent(w.id as string)}`}
                                   onClick={() => setOpenMenu(null)}
                                   className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#2563EB] hover:bg-[#F7F8FA] transition-colors"
                                 >
@@ -284,7 +284,7 @@ export default function MeusDesejosPage() {
                       {/* Linha 3: Ações */}
                       <div className="flex items-center gap-2">
                         <Link
-                          href="/vendedor/matches"
+                          href={`/vendedor/matches?wishId=${encodeURIComponent(w.id as string)}`}
                           className="flex-1 h-[32px] rounded-[7px] bg-[#2563EB] text-white text-[12px] font-semibold inline-flex items-center justify-center hover:brightness-90 transition-all"
                         >
                           Ver Matches
