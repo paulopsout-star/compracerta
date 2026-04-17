@@ -73,6 +73,7 @@ function vehicleToOffer(v: AvaliadorVehicle, index: number): Offer {
     state: v.uf.trim().toUpperCase(),
     active: true,
     syncedAt: new Date(v.data_atualizacao),
+    externalStatus: v.status,
   };
 }
 

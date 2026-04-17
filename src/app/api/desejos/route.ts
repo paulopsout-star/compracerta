@@ -19,6 +19,8 @@ interface ImmediateMatch {
     city: string;
     state: string;
     source: string;
+    externalStatus?: string;
+    syncedAt?: string;
   };
 }
 
@@ -150,6 +152,8 @@ export async function POST(request: NextRequest) {
             city: offer.city,
             state: offer.state,
             source: offer.source,
+            externalStatus: offer.externalStatus,
+            syncedAt: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : undefined,
           },
         });
 

@@ -11,6 +11,8 @@ interface ImmediateMatch {
   offer: {
     brand: string; model: string; version?: string; year: number; km: number;
     color?: string; price: number; city: string; state: string; source: string;
+    externalStatus?: string;
+    syncedAt?: string;
   };
 }
 
@@ -138,6 +140,8 @@ export async function PATCH(
             brand: offer.brand, model: offer.model, version: offer.version,
             year: offer.year, km: offer.km, color: offer.color, price: offer.price,
             city: offer.city, state: offer.state, source: offer.source,
+            externalStatus: offer.externalStatus,
+            syncedAt: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : undefined,
           },
         });
 

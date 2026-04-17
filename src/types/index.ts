@@ -103,6 +103,8 @@ export interface Offer {
   state: string;
   active: boolean;
   syncedAt: Date;
+  /** Status original da fonte externa (ex: "Avaliado", "Publicado", "Pendente" do Avaliador Digital) */
+  externalStatus?: string;
 }
 
 export interface Match {

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { WishForm } from "@/components/forms/wish-form";
-import { CheckCircle2, Zap, MapPin, Sparkles, PlusCircle, ArrowRight, Pencil } from "lucide-react";
+import { CheckCircle2, Zap, MapPin, Sparkles, PlusCircle, ArrowRight, Pencil, CalendarClock } from "lucide-react";
 import type { WishFormData } from "@/lib/validators/wish";
 
 interface ImmediateMatch {
@@ -13,6 +13,8 @@ interface ImmediateMatch {
   offer: {
     brand: string; model: string; version?: string; year: number; km: number;
     color?: string; price: number; city: string; state: string; source: string;
+    externalStatus?: string;
+    syncedAt?: string;
   };
 }
 
@@ -21,6 +23,17 @@ const SOURCE_LABEL: Record<string, { label: string; cls: string }> = {
   avaliador: { label: "Avaliador Digital", cls: "bg-blue-50 text-blue-700" },
   estoque_lojista: { label: "Lojista", cls: "bg-green-50 text-green-700" },
 };
+
+const STATUS_CLS: Record<string, string> = {
+  Avaliado: "bg-[rgba(37,99,235,0.1)] text-[#2563EB]",
+  Publicado: "bg-green-50 text-green-700",
+  Pendente: "bg-amber-50 text-amber-700",
+};
+
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
 
 function fmt(v: number) {
   if (v === 0) return "Sob consulta";
@@ -155,6 +168,7 @@ export default function NovoDesejoPage() {
 
               {matches.map((m, i) => {
                 const src = SOURCE_LABEL[m.offer.source] ?? SOURCE_LABEL.marketplace;
+                const statusCls = m.offer.externalStatus ? (STATUS_CLS[m.offer.externalStatus] ?? "bg-gray-100 text-gray-600") : "";
                 return (
                   <div key={i} className="card-tradox hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -166,6 +180,11 @@ export default function NovoDesejoPage() {
                           <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${src.cls}`}>
                             {src.label}
                           </span>
+                          {m.offer.externalStatus && (
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>
+                              {m.offer.externalStatus}
+                            </span>
+                          )}
                         </div>
                         <p className="text-[16px] font-bold text-[#111827]">
                           {m.offer.brand} {m.offer.model}
@@ -184,9 +203,20 @@ export default function NovoDesejoPage() {
                             </>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 mt-1.5 text-[12px] text-[#9AA0AB]">
-                          <MapPin className="w-3 h-3" />
-                          {m.offer.city}/{m.offer.state}
+                        <div className="flex items-center gap-3 mt-1.5 text-[12px] text-[#9AA0AB] flex-wrap">
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {m.offer.city}/{m.offer.state}
+                          </span>
+                          {m.offer.syncedAt && (
+                            <>
+                              <span>·</span>
+                              <span className="inline-flex items-center gap-1">
+                                <CalendarClock className="w-3 h-3" />
+                                Avaliado em {formatDate(m.offer.syncedAt)}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
