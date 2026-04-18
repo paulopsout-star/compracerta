@@ -1,9 +1,12 @@
 "use client";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Zap, Loader2, X, ArrowLeft, MapPin } from "lucide-react";
+import { Zap, Loader2, X, ArrowLeft, MapPin, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
+
+type SortDir = "asc" | "desc" | null;
+type SortKey = "vehicle" | "score" | "status" | "year" | "km" | "date" | "location" | "price" | null;
 
 function fmt(v: number) {
   if (!v || v === 0) return "—";
@@ -27,6 +30,38 @@ function scoreCls(score: number) {
   return "bg-gray-100 text-gray-600";
 }
 
+/* Header clicavel com indicador de ordenacao */
+function SortHeader({
+  label, sortKey, currentKey, currentDir, onSort, align = "left",
+}: {
+  label: string;
+  sortKey: Exclude<SortKey, null>;
+  currentKey: SortKey;
+  currentDir: SortDir;
+  onSort: (key: Exclude<SortKey, null>) => void;
+  align?: "left" | "center" | "right";
+}) {
+  const isActive = currentKey === sortKey;
+  const alignCls = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 ${alignCls} text-[10px] font-semibold uppercase tracking-[0.4px] min-w-0 overflow-hidden transition-colors cursor-pointer select-none
+        ${isActive ? "text-[#2563EB]" : "text-[#B0B7C3] hover:text-[#6B7280]"}`}
+      aria-label={`Ordenar por ${label}`}
+    >
+      <span className="truncate">{label}</span>
+      {isActive ? (
+        currentDir === "asc" ? <ArrowUp className="w-3 h-3 shrink-0" /> : <ArrowDown className="w-3 h-3 shrink-0" />
+      ) : (
+        <ChevronsUpDown className="w-3 h-3 shrink-0 opacity-40" />
+      )}
+    </button>
+  );
+}
+
 function MatchesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -35,6 +70,10 @@ function MatchesContent() {
   const [matches, setMatches] = useState<Record<string, unknown>[]>([]);
   const [wishInfo, setWishInfo] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Sorting — default: por score descendente
+  const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   useEffect(() => {
     const url = wishId ? `/api/matching?wishId=${encodeURIComponent(wishId)}` : "/api/matching";
@@ -51,6 +90,47 @@ function MatchesContent() {
     : "Veículos encontrados para seus clientes";
 
   function clearFilter() { router.push("/vendedor/matches"); }
+
+  // Handler de sort: asc → desc → null (sem ordenação)
+  function handleSort(key: Exclude<SortKey, null>) {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
+    } else if (sortDir === "desc") {
+      setSortKey(null);
+      setSortDir(null);
+    }
+  }
+
+  // Extrair valores ordenáveis por chave
+  function getSortValue(m: Record<string, unknown>, key: Exclude<SortKey, null>): string | number {
+    const offer = m.offers as Record<string, unknown> | undefined;
+    if (!offer) return "";
+    switch (key) {
+      case "vehicle": return `${offer.brand ?? ""} ${offer.model ?? ""}`.toLowerCase();
+      case "score": return (m.score as number) ?? 0;
+      case "status": return (offer.external_status as string) ?? "";
+      case "year": return (offer.year as number) ?? 0;
+      case "km": return (offer.km as number) ?? 0;
+      case "date": return offer.synced_at ? new Date(offer.synced_at as string).getTime() : 0;
+      case "location": return `${offer.state ?? ""}-${offer.city ?? ""}`.toLowerCase();
+      case "price": return (offer.price as number) ?? 0;
+    }
+  }
+
+  const sortedMatches = useMemo(() => {
+    if (!sortKey || !sortDir) return matches;
+    const sorted = [...matches].sort((a, b) => {
+      const va = getSortValue(a, sortKey);
+      const vb = getSortValue(b, sortKey);
+      if (va < vb) return sortDir === "asc" ? -1 : 1;
+      if (va > vb) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [matches, sortKey, sortDir]);
 
   // Soma fixa: 56 + 92 + 56 + 82 + 62 + 100 + 90 + 88 = 626
   // + veiculo min 140 + gaps + padding = ~814
@@ -115,25 +195,25 @@ function MatchesContent() {
           <>
             {/* ─── Desktop ≥1024px: List view ─── */}
             <div className="card-tradox !p-0 overflow-hidden hidden lg:block w-full min-w-0 max-w-full">
-              {/* Header */}
+              {/* Header — ordenavel */}
               <div
                 className="grid gap-1.5 px-3 py-3 bg-[#F7F8FA] border-b border-[#EEF0F3] items-center w-full max-w-full"
                 style={{ gridTemplateColumns: gridTemplate }}
               >
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Veículo</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Score</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Status</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Ano</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">KM</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-center min-w-0 overflow-hidden">Data aval.</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] min-w-0 overflow-hidden">Localização</span>
-                <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">Preço</span>
+                <SortHeader label="Veículo" sortKey="vehicle" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortHeader label="Score" sortKey="score" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="center" />
+                <SortHeader label="Status" sortKey="status" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="center" />
+                <SortHeader label="Ano" sortKey="year" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="center" />
+                <SortHeader label="KM" sortKey="km" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="right" />
+                <SortHeader label="Data aval." sortKey="date" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="center" />
+                <SortHeader label="Localização" sortKey="location" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortHeader label="Preço" sortKey="price" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} align="right" />
                 <span className="text-[10px] font-semibold text-[#B0B7C3] uppercase tracking-[0.4px] text-right min-w-0 overflow-hidden">Ações</span>
               </div>
 
               {/* Rows */}
               <div className="divide-y divide-[#F3F4F6]">
-                {matches.map((m) => {
+                {sortedMatches.map((m) => {
                   const offer = m.offers as Record<string, unknown> | undefined;
                   const wish = m.wishes as Record<string, unknown> | undefined;
                   if (!offer || !wish) return null;
