@@ -2,8 +2,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { PlusCircle, Heart, Loader2, Trash2, RefreshCw, MoreHorizontal } from "lucide-react";
+import { PlusCircle, Heart, Loader2, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { RowActionsMenu } from "@/components/ui/row-actions-menu";
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   procurando: { label: "Procurando", cls: "bg-[rgba(37,99,235,0.1)] text-[#2563EB]" },
@@ -26,7 +27,6 @@ function fmt(v: number) {
 export default function MeusDesejosPage() {
   const [wishes, setWishes] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
@@ -35,13 +35,11 @@ export default function MeusDesejosPage() {
   useEffect(load, []);
 
   async function updateStatus(id: string, status: string) {
-    setOpenMenu(null);
     await fetch(`/api/desejos/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
     toast.success("Status atualizado");
     load();
   }
   async function deleteWish(id: string) {
-    setOpenMenu(null);
     if (!confirm("Deseja excluir este desejo?")) return;
     await fetch(`/api/desejos/${id}`, { method: "DELETE" });
     toast.success("Desejo excluído");
@@ -184,51 +182,37 @@ export default function MeusDesejosPage() {
                         >
                           Ver
                         </Link>
-                        <div className="relative">
-                          <button
-                            onClick={() => setOpenMenu(openMenu === (w.id as string) ? null : (w.id as string))}
-                            className="w-[26px] h-[26px] flex items-center justify-center rounded-md text-[#C1C7D0] hover:text-[#6B7280] hover:bg-[#F3F4F6] transition-all"
+                        <RowActionsMenu>
+                          <Link
+                            href={`/vendedor/matches?wishId=${encodeURIComponent(w.id as string)}`}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#2563EB] hover:bg-[#F7F8FA] transition-colors"
                           >
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                          {openMenu === w.id && (
-                            <>
-                              <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
-                              <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-[10px] shadow-lg shadow-black/10 border border-[#EEF0F3] py-1.5 min-w-[180px]">
-                                <Link
-                                  href={`/vendedor/matches?wishId=${encodeURIComponent(w.id as string)}`}
-                                  onClick={() => setOpenMenu(null)}
-                                  className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#2563EB] hover:bg-[#F7F8FA] transition-colors"
-                                >
-                                  Ver Matches
-                                </Link>
-                                {isActive && (
-                                  <button
-                                    onClick={() => updateStatus(w.id as string, "em_negociacao")}
-                                    className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#5B6370] hover:bg-[#F7F8FA] transition-colors text-left"
-                                  >
-                                    Em Negociação
-                                  </button>
-                                )}
-                                {w.status === "em_negociacao" && (
-                                  <button
-                                    onClick={() => updateStatus(w.id as string, "convertido")}
-                                    className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-green-700 hover:bg-green-50 transition-colors text-left"
-                                  >
-                                    Marcar como Vendido
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => deleteWish(w.id as string)}
-                                  className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#E5484D] hover:bg-red-50 transition-colors text-left"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  Excluir
-                                </button>
-                              </div>
-                            </>
+                            Ver Matches
+                          </Link>
+                          {isActive && (
+                            <button
+                              onClick={() => updateStatus(w.id as string, "em_negociacao")}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#5B6370] hover:bg-[#F7F8FA] transition-colors text-left"
+                            >
+                              Em Negociação
+                            </button>
                           )}
-                        </div>
+                          {w.status === "em_negociacao" && (
+                            <button
+                              onClick={() => updateStatus(w.id as string, "convertido")}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-green-700 hover:bg-green-50 transition-colors text-left"
+                            >
+                              Marcar como Vendido
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteWish(w.id as string)}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#E5484D] hover:bg-red-50 transition-colors text-left"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Excluir
+                          </button>
+                        </RowActionsMenu>
                       </div>
                     </div>
                   );
