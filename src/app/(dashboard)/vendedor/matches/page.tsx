@@ -327,11 +327,11 @@ function MatchesContent() {
                       {offer.version ? (
                         <p className="text-[12px] text-[#9AA0AB] truncate">{offer.version as string}</p>
                       ) : null}
-                      {(offer.external_dealership_name || offer.external_seller_name) && (
+                      {(offer.external_dealership_name || offer.external_seller_name) ? (
                         <p className="text-[12px] text-[#5B6370] truncate mt-0.5">
                           {[offer.external_dealership_name as string | null, offer.external_seller_name as string | null].filter(Boolean).join(" · ")}
                         </p>
-                      )}
+                      ) : null}
                       <p className="text-[12px] text-[#9AA0AB] truncate mt-1">
                         {offer.year as number} · {((offer.km as number) ?? 0).toLocaleString("pt-BR")} km
                         {syncedAt ? ` · avaliado em ${formatDate(syncedAt)}` : ""}
