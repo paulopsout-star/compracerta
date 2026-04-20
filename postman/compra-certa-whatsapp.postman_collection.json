@@ -1,0 +1,276 @@
+{
+  "info": {
+    "name": "Compra Certa — WhatsApp (Z-API)",
+    "description": "Coleção de testes do webhook WhatsApp, envio via Z-API e painel admin. Spec: prompt-final-whatsapp-compra-certa.md seção 12.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "compra_certa_api", "value": "http://localhost:3000" },
+    { "key": "webhook_secret", "value": "" },
+    { "key": "test_seller_phone", "value": "5531999990001" },
+    { "key": "zapi_base_url", "value": "https://api.z-api.io" },
+    { "key": "zapi_instance_id", "value": "" },
+    { "key": "zapi_instance_token", "value": "" },
+    { "key": "zapi_client_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Webhook inbound — cenários obrigatórios",
+      "item": [
+        {
+          "name": "1.1 Cadastro completo em 1 mensagem",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('ACK 200', () => pm.response.to.have.status(200));",
+                "pm.test('Respondeu em < 1s', () => pm.expect(pm.response.responseTime).to.be.below(1000));",
+                "pm.test('Retornou ack', () => pm.expect(pm.response.json().ack).to.eql(true));"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"fromMe\": false,\n  \"momment\": 1730000000,\n  \"type\": \"ReceivedCallback\",\n  \"text\": { \"message\": \"Oi, tenho um cliente que quer um Civic EXL 2022 automático preto, até 130 mil, até 50 mil km. Nome João Silva, telefone 31988887777\" },\n  \"isGroup\": false,\n  \"notification\": null,\n  \"senderName\": \"Pedro Vendedor\"\n}"
+            }
+          }
+        },
+        {
+          "name": "1.2 Fragmentada — só modelo",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"fromMe\": false,\n  \"text\": { \"message\": \"quero um corolla\" },\n  \"isGroup\": false\n}" }
+          }
+        },
+        {
+          "name": "1.3 Continuação — ano",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"fromMe\": false,\n  \"text\": { \"message\": \"de 2020 a 2023\" },\n  \"isGroup\": false\n}" }
+          }
+        },
+        {
+          "name": "1.4 Confirmação",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"fromMe\": false,\n  \"text\": { \"message\": \"pode cadastrar\" },\n  \"isGroup\": false\n}" }
+          }
+        },
+        {
+          "name": "1.5 Cancelamento",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"fromMe\": false,\n  \"text\": { \"message\": \"cancelar\" },\n  \"isGroup\": false\n}" }
+          }
+        },
+        {
+          "name": "1.6 Idempotência — messageId fixo (rodar 2x)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "pm.test('ACK sempre 200', () => pm.response.to.have.status(200));",
+                "// 2ª execução deve cair no caminho duplicate no log do servidor"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"FIXED_DUPLICATE_TEST_001\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"fromMe\": false,\n  \"text\": { \"message\": \"teste duplicata\" },\n  \"isGroup\": false\n}" }
+          }
+        },
+        {
+          "name": "1.7 Mensagem de grupo (ignorada)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('200 com ignored=group_message', () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().ignored).to.eql('group_message');",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"text\": { \"message\": \"oi\" },\n  \"isGroup\": true\n}" }
+          }
+        },
+        {
+          "name": "1.8 Número desconhecido",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"5511000000000\",\n  \"text\": { \"message\": \"quero cadastrar\" },\n  \"isGroup\": false\n}" }
+          }
+        },
+        {
+          "name": "1.9 Áudio (flag audio_transcription desligada → resposta específica)",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"audio\": { \"audioUrl\": \"https://example.com/audio.ogg\", \"mimeType\": \"audio/ogg\" },\n  \"isGroup\": false\n}" }
+          }
+        },
+        {
+          "name": "1.10 Gíria — 'zerinho top de linha'",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"text\": { \"message\": \"meu cliente quer um compass zerinho top de linha\" },\n  \"isGroup\": false\n}" }
+          }
+        },
+        {
+          "name": "1.11 Assinatura inválida (quando webhook_secret setado)",
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('401 quando assinatura inválida', () => {",
+              "  if (pm.variables.get('webhook_secret')) pm.response.to.have.status(401);",
+              "  else pm.expect(true).to.be.true;",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "assinatura-invalida" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"{{$guid}}\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"text\": { \"message\": \"teste\" },\n  \"isGroup\": false\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Webhook status",
+      "item": [
+        {
+          "name": "2.1 SENT",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/status",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"ABC123\",\n  \"phone\": \"{{test_seller_phone}}\",\n  \"status\": \"SENT\",\n  \"momment\": 1730000000\n}" }
+          }
+        },
+        {
+          "name": "2.2 READ",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/status",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"ABC123\",\n  \"status\": \"READ\"\n}" }
+          }
+        },
+        {
+          "name": "2.3 FAILED (dispara retry/fallback)",
+          "request": {
+            "method": "POST",
+            "url": "{{compra_certa_api}}/api/webhooks/whatsapp/status",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Zapi-Signature", "value": "{{webhook_secret}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"messageId\": \"ABC123\",\n  \"status\": \"FAILED\",\n  \"failureReason\": \"recipient_blocked\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Z-API envio direto (valida credenciais)",
+      "item": [
+        {
+          "name": "3.1 Enviar texto",
+          "request": {
+            "method": "POST",
+            "url": "{{zapi_base_url}}/instances/{{zapi_instance_id}}/token/{{zapi_instance_token}}/send-text",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Client-Token", "value": "{{zapi_client_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"{{test_seller_phone}}\",\n  \"message\": \"Teste de envio via Postman\"\n}" }
+          }
+        },
+        {
+          "name": "3.2 Enviar lista de botões",
+          "request": {
+            "method": "POST",
+            "url": "{{zapi_base_url}}/instances/{{zapi_instance_id}}/token/{{zapi_instance_token}}/send-button-list",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Client-Token", "value": "{{zapi_client_token}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"{{test_seller_phone}}\",\n  \"message\": \"Pode cadastrar?\",\n  \"buttonList\": {\n    \"buttons\": [\n      { \"id\": \"confirm\", \"label\": \"✅ SIM\" },\n      { \"id\": \"edit\", \"label\": \"✏️ Editar\" },\n      { \"id\": \"cancel\", \"label\": \"❌ Cancelar\" }\n    ]\n  }\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Health checks",
+      "item": [
+        {
+          "name": "4.1 GET inbound",
+          "request": { "method": "GET", "url": "{{compra_certa_api}}/api/webhooks/whatsapp/inbound" }
+        },
+        {
+          "name": "4.2 GET status",
+          "request": { "method": "GET", "url": "{{compra_certa_api}}/api/webhooks/whatsapp/status" }
+        }
+      ]
+    }
+  ]
+}

@@ -340,3 +340,152 @@ model FipeReference {
   @@index([brand, model])
   @@map("fipe_references")
 }
+
+// =====================================================================
+// WhatsApp conversacional (Z-API) — ver spec "prompt-final-whatsapp-compra-certa.md"
+// =====================================================================
+
+enum ConversationState {
+  idle
+  collecting_wish
+  confirming
+  viewing_status
+  viewing_matches
+  editing_field
+  getting_help
+  waiting_feedback
+}
+
+enum InboundContentType {
+  text
+  audio
+  image
+  button
+  list
+  other
+}
+
+enum OutboundStatus {
+  pending
+  sent
+  delivered
+  read
+  failed
+}
+
+model ConversationSession {
+  id            String            @id @default(cuid())
+  sellerId      String?           @map("seller_id")
+  phoneE164     String            @map("phone_e164")
+  state         ConversationState @default(idle)
+  currentIntent String?           @map("current_intent")
+  draftWish     Json?             @map("draft_wish")
+  context       Json?
+  lastMessageAt DateTime          @map("last_message_at")
+  expiresAt     DateTime          @map("expires_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  inboundMessages  WhatsAppInboundMessage[]
+
+  @@index([phoneE164])
+  @@index([sellerId])
+  @@index([expiresAt])
+  @@map("conversation_sessions")
+}
+
+model WhatsAppInboundMessage {
+  id                 String              @id @default(cuid())
+  providerMessageId  String              @unique @map("provider_message_id")
+  phoneE164          String              @map("phone_e164")
+  sellerId           String?             @map("seller_id")
+  contentType        InboundContentType  @default(text) @map("content_type")
+  content            String?
+  mediaUrl           String?             @map("media_url")
+  rawPayload         Json?               @map("raw_payload")
+  receivedAt         DateTime            @map("received_at")
+  processedAt        DateTime?           @map("processed_at")
+  sessionId          String?             @map("session_id")
+  createdAt          DateTime            @default(now()) @map("created_at")
+
+  session            ConversationSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([phoneE164])
+  @@index([receivedAt])
+  @@index([sellerId])
+  @@map("whatsapp_inbound_messages")
+}
+
+model WhatsAppOutboundMessage {
+  id                 String         @id @default(cuid())
+  phoneE164          String         @map("phone_e164")
+  recipientId        String?        @map("recipient_id")
+  recipientType      String?        @map("recipient_type")
+  templateName       String?        @map("template_name")
+  payload            Json?
+  providerMessageId  String?        @map("provider_message_id")
+  status             OutboundStatus @default(pending)
+  failureReason      String?        @map("failure_reason")
+  sentAt             DateTime?      @map("sent_at")
+  deliveredAt        DateTime?      @map("delivered_at")
+  readAt             DateTime?      @map("read_at")
+  retryCount         Int            @default(0) @map("retry_count")
+  nextRetryAt        DateTime?      @map("next_retry_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+
+  @@index([phoneE164])
+  @@index([status])
+  @@index([providerMessageId])
+  @@map("whatsapp_outbound_messages")
+}
+
+model MatchGroup {
+  id            String   @id @default(cuid())
+  wishId        String   @map("wish_id")
+  sellerId      String   @map("seller_id")
+  matches       Json
+  currentIndex  Int      @default(0) @map("current_index")
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([sellerId])
+  @@index([wishId])
+  @@index([expiresAt])
+  @@map("match_groups")
+}
+
+model FeatureFlag {
+  key         String   @id
+  enabled     Boolean  @default(false)
+  value       Json?
+  description String?
+  environment String   @default("production")
+  updatedBy   String?  @map("updated_by")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("feature_flags")
+}
+
+model FeatureFlagHistory {
+  id         String   @id @default(cuid())
+  flagKey    String   @map("flag_key")
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  changedBy  String?  @map("changed_by")
+  changedAt  DateTime @default(now()) @map("changed_at")
+  reason     String?
+
+  @@index([flagKey])
+  @@index([changedAt])
+  @@map("feature_flag_history")
+}
+
+model WishRateCounter {
+  sellerId String   @map("seller_id")
+  date     DateTime @db.Date
+  count    Int      @default(0)
+
+  @@id([sellerId, date])
+  @@map("wish_rate_counters")
+}
