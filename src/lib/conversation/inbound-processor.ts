@@ -93,6 +93,7 @@ async function registerInbound(
 }
 
 export async function processInbound(env: InboundEnvelope): Promise<ProcessResult> {
+  console.log("[Inbound] enter", { messageId: env.providerMessageId, phone: env.phoneRaw, hasText: !!env.text });
   try {
     if (await isEnabled("maintenance_mode.enabled")) {
       await sendText(env.phoneRaw, renderTemplate("manutencao", { previsao_retorno: "em breve" }), {
@@ -114,7 +115,9 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
       return { outcome: "rate_limited" };
     }
 
+    console.log("[Inbound] identifying sender", { phoneE164 });
     const ident = await identifySender(phoneE164);
+    console.log("[Inbound] ident result", { kind: ident.kind, userId: ident.kind !== "unknown" ? ident.user.id : null });
 
     // Desconhecido — resposta padrão, NÃO persiste (LGPD)
     if (ident.kind === "unknown") {

@@ -57,6 +57,7 @@ function verifySignature(req: NextRequest): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  console.log("[Webhook inbound] POST received", { ts: new Date().toISOString() });
   if (!verifySignature(req)) {
     console.warn("[Webhook inbound] assinatura inválida");
     return NextResponse.json({ ack: false, error: "invalid_signature" }, { status: 401 });
@@ -94,12 +95,12 @@ export async function POST(req: NextRequest) {
     rawPayload: payload,
   };
 
+  console.log("[Webhook inbound] queuing processInbound", { messageId: env.providerMessageId, phone: env.phoneRaw });
   // Processa fora do caminho crítico — ACK rápido
   runAfter(async () => {
+    console.log("[Webhook inbound] processInbound start", { messageId: env.providerMessageId });
     const result = await processInbound(env);
-    if (result.outcome === "error") {
-      console.error("[Webhook inbound] processing error:", result.reason, { messageId: env.providerMessageId });
-    }
+    console.log("[Webhook inbound] processInbound done", { messageId: env.providerMessageId, outcome: result.outcome, reason: result.reason });
   });
 
   return NextResponse.json({ ack: true, messageId: payload.messageId });
