@@ -8,17 +8,8 @@
  * - Idempotência no processor
  */
 
-import { after, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { processInbound, type InboundEnvelope } from "@/lib/conversation/inbound-processor";
-
-function runAfter(task: () => Promise<void>): void {
-  try {
-    after(task);
-  } catch {
-    // waitUntil não disponível — fallback best-effort
-    task().catch((err) => console.error("[Webhook] after fallback error:", err));
-  }
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,19 +86,17 @@ export async function POST(req: NextRequest) {
     rawPayload: payload,
   };
 
-  console.log("[Webhook inbound] queuing processInbound", { messageId: env.providerMessageId, phone: env.phoneRaw });
-  // Processa fora do caminho crítico — ACK rápido
-  runAfter(async () => {
-    console.log("[Webhook inbound] processInbound start", { messageId: env.providerMessageId });
-    try {
-      const result = await processInbound(env);
-      console.log("[Webhook inbound] processInbound done", { messageId: env.providerMessageId, outcome: result.outcome, reason: result.reason });
-    } catch (err) {
-      console.error("[Webhook inbound] processInbound THROW:",
-        err instanceof Error ? err.message : String(err),
-        err instanceof Error ? err.stack : "");
-    }
-  });
+  // Processa inline — `after()` do Next.js 16 está sendo truncado no runtime
+  // Vercel (callback agendado mas morre antes do await resolver). Trade-off:
+  // +1-2s no ACK, em troca de garantia de execução. Z-API aceita até ~5s.
+  try {
+    const result = await processInbound(env);
+    console.log("[Webhook inbound] processed", { messageId: env.providerMessageId, outcome: result.outcome, reason: result.reason });
+  } catch (err) {
+    console.error("[Webhook inbound] processInbound THROW:",
+      err instanceof Error ? err.message : String(err),
+      err instanceof Error ? err.stack : "");
+  }
 
   return NextResponse.json({ ack: true, messageId: payload.messageId });
 }

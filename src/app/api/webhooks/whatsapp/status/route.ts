@@ -5,16 +5,8 @@
  * Em FAILED, agenda retry (tratamento completo de fallback e-mail fica na fase de notificações ricas).
  */
 
-import { after, NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
-
-function runAfter(task: () => Promise<void>): void {
-  try {
-    after(task);
-  } catch {
-    task().catch((err) => console.error("[Webhook] after fallback error:", err));
-  }
-}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,7 +78,11 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ ack: false, error: "invalid_json" }, { status: 400 });
   }
-  runAfter(async () => applyStatus(payload));
+  try {
+    await applyStatus(payload);
+  } catch (err) {
+    console.error("[Webhook status] applyStatus error:", err);
+  }
   return NextResponse.json({ ack: true });
 }
 
