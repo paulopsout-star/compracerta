@@ -87,19 +87,34 @@ export async function POST(req: NextRequest) {
     rawPayload: payload,
   };
 
-  // DEBUG: insert direto no DB antes de qualquer outra coisa. Se esse log
-  // aparecer no DB mas processInbound não, sabemos que o problema está
-  // especificamente no processador (e não em rede/DB/build).
+  // DEBUG: insert com URL hardcoded vs env var — isola se o problema é env-var (\n)
+  // ou outra coisa.
+  const urlEnv = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const keyEnv = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  console.log("[Webhook inbound] DEBUG env:",
+    { url: JSON.stringify(urlEnv), urlLen: urlEnv.length, keyLen: keyEnv.length,
+      urlEndsWithNewline: urlEnv.endsWith("\n") });
+
   try {
-    const { error: debugError } = await supabase.from("whatsapp_inbound_messages").insert({
-      provider_message_id: `debug-route-${env.providerMessageId}`,
+    const { createClient } = await import("@supabase/supabase-js");
+    const sbHard = createClient("https://xqwbgcblyyfqwjuwqvjf.supabase.co", keyEnv.trim());
+    const { error } = await sbHard.from("whatsapp_inbound_messages").insert({
+      provider_message_id: `debug-hardcoded-${env.providerMessageId}`,
       phone_e164: env.phoneRaw,
-      content: env.text ?? "(debug: inline insert before processInbound)",
+      content: "(debug: hardcoded URL)",
       received_at: env.receivedAt.toISOString(),
     });
-    console.log("[Webhook inbound] DEBUG inline insert:", debugError ? debugError.message : "OK");
+    console.log("[Webhook inbound] DEBUG hardcoded insert:", error ? error.message : "OK");
+
+    const { error: e2 } = await supabase.from("whatsapp_inbound_messages").insert({
+      provider_message_id: `debug-env-${env.providerMessageId}`,
+      phone_e164: env.phoneRaw,
+      content: "(debug: env-based client)",
+      received_at: env.receivedAt.toISOString(),
+    });
+    console.log("[Webhook inbound] DEBUG env insert:", e2 ? e2.message : "OK");
   } catch (err) {
-    console.error("[Webhook inbound] DEBUG inline insert THROW:", err);
+    console.error("[Webhook inbound] DEBUG insert THROW:", err instanceof Error ? err.message : String(err));
   }
 
   // Processa inline — `after()` do Next.js 16 está sendo truncado no runtime
