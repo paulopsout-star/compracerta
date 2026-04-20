@@ -8,7 +8,6 @@ import {
   PlusCircle,
   Heart,
   Zap,
-  Bell,
   Users,
   BarChart3,
   Package,
@@ -16,10 +15,7 @@ import {
   Settings,
   ScrollText,
   Plug,
-  HelpCircle,
   Wallet,
-  Store,
-  Star,
 } from "lucide-react";
 
 export type UserRole = "vendedor" | "gestor" | "lojista" | "admin";
@@ -31,62 +27,34 @@ interface NavItem {
   badge?: number;
 }
 
-const NAV_ITEMS: Record<UserRole, { main: NavItem[]; utility: NavItem[] }> = {
-  vendedor: {
-    main: [
-      { label: "Painel", href: "/vendedor", icon: LayoutDashboard },
-      { label: "Cadastrar Desejo", href: "/desejos/novo", icon: PlusCircle },
-      { label: "Meus Desejos", href: "/vendedor/desejos", icon: Heart },
-      { label: "Matches", href: "/vendedor/matches", icon: Zap },
-      { label: "Minha Carteira", href: "/vendedor/carteira", icon: Wallet },
-      { label: "Marketplace", href: "/vendedor/marketplace", icon: Store },
-      { label: "Notificações", href: "/vendedor/notificacoes", icon: Bell, badge: 3 },
-      { label: "Indicações", href: "/vendedor/indicacoes", icon: Star },
-    ],
-    utility: [
-      { label: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
-      { label: "Configurações", href: "/configuracoes", icon: Settings },
-    ],
-  },
-  gestor: {
-    main: [
-      { label: "Painel", href: "/gestor", icon: LayoutDashboard },
-      { label: "Equipe", href: "/gestor/equipe", icon: Users },
-      { label: "Desejos", href: "/gestor/desejos", icon: Heart },
-      { label: "Marketplace", href: "/gestor/marketplace", icon: Store },
-      { label: "Relatórios", href: "/gestor/relatorios", icon: BarChart3 },
-    ],
-    utility: [
-      { label: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
-      { label: "Configurações", href: "/configuracoes", icon: Settings },
-    ],
-  },
-  lojista: {
-    main: [
-      { label: "Painel", href: "/lojista", icon: LayoutDashboard },
-      { label: "Cadastrar Estoque", href: "/lojista/upload", icon: Upload },
-      { label: "Meu Estoque", href: "/lojista/estoque", icon: Package },
-      { label: "Matches", href: "/lojista/matches", icon: Zap },
-      { label: "Histórico", href: "/lojista/historico", icon: BarChart3 },
-    ],
-    utility: [
-      { label: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
-      { label: "Configurações", href: "/configuracoes", icon: Settings },
-    ],
-  },
-  admin: {
-    main: [
-      { label: "Painel", href: "/admin", icon: LayoutDashboard },
-      { label: "Usuários", href: "/admin/usuarios", icon: Users },
-      { label: "Integrações", href: "/admin/integracoes", icon: Plug },
-      { label: "Logs", href: "/admin/logs", icon: ScrollText },
-      { label: "Parâmetros", href: "/admin/parametros", icon: Settings },
-    ],
-    utility: [
-      { label: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
-      { label: "Configurações", href: "/configuracoes", icon: Settings },
-    ],
-  },
+const NAV_ITEMS: Record<UserRole, NavItem[]> = {
+  vendedor: [
+    { label: "Painel", href: "/vendedor", icon: LayoutDashboard },
+    { label: "Cadastrar Desejo", href: "/desejos/novo", icon: PlusCircle },
+    { label: "Meus Desejos", href: "/vendedor/desejos", icon: Heart },
+    { label: "Matches", href: "/vendedor/matches", icon: Zap },
+    { label: "Minha Carteira", href: "/vendedor/carteira", icon: Wallet },
+  ],
+  gestor: [
+    { label: "Painel", href: "/gestor", icon: LayoutDashboard },
+    { label: "Equipe", href: "/gestor/equipe", icon: Users },
+    { label: "Desejos", href: "/gestor/desejos", icon: Heart },
+    { label: "Relatórios", href: "/gestor/relatorios", icon: BarChart3 },
+  ],
+  lojista: [
+    { label: "Painel", href: "/lojista", icon: LayoutDashboard },
+    { label: "Cadastrar Estoque", href: "/lojista/upload", icon: Upload },
+    { label: "Meu Estoque", href: "/lojista/estoque", icon: Package },
+    { label: "Matches", href: "/lojista/matches", icon: Zap },
+    { label: "Histórico", href: "/lojista/historico", icon: BarChart3 },
+  ],
+  admin: [
+    { label: "Painel", href: "/admin", icon: LayoutDashboard },
+    { label: "Usuários", href: "/admin/usuarios", icon: Users },
+    { label: "Integrações", href: "/admin/integracoes", icon: Plug },
+    { label: "Logs", href: "/admin/logs", icon: ScrollText },
+    { label: "Parâmetros", href: "/admin/parametros", icon: Settings },
+  ],
 };
 
 interface SidebarProps {
@@ -118,7 +86,7 @@ function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
 
 export function Sidebar({ role, className }: SidebarProps) {
   const pathname = usePathname();
-  const { main, utility } = NAV_ITEMS[role];
+  const items = NAV_ITEMS[role];
 
   function isActive(href: string) {
     if (href === `/${role}`) return pathname === href;
@@ -132,7 +100,7 @@ export function Sidebar({ role, className }: SidebarProps) {
         className
       )}
     >
-      {/* Logo — TradoX style */}
+      {/* Logo */}
       <div className="px-6 pt-8 pb-6">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-[10px] bg-[var(--sidebar-primary)] text-white">
@@ -149,19 +117,12 @@ export function Sidebar({ role, className }: SidebarProps) {
         </div>
       </div>
 
-      {/* Main Nav */}
-      <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-        {main.map((item) => (
+      {/* Navigation */}
+      <nav className="flex-1 px-3 pb-6 space-y-1 overflow-y-auto">
+        {items.map((item) => (
           <NavLink key={item.href} item={item} isActive={isActive(item.href)} />
         ))}
       </nav>
-
-      {/* Utility Nav — base da sidebar */}
-      <div className="px-3 pb-6 pt-2 border-t border-[var(--sidebar-border)] mt-2 space-y-1">
-        {utility.map((item) => (
-          <NavLink key={item.href} item={item} isActive={isActive(item.href)} />
-        ))}
-      </div>
     </aside>
   );
 }

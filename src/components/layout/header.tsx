@@ -1,6 +1,10 @@
 "use client";
 
-import { Menu, Search, MessageSquare, Bell } from "lucide-react";
+import { useRef, useState, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
+import { Menu, Search, MessageSquare, Bell, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface HeaderProps {
@@ -16,6 +20,7 @@ export function Header({
   subtitle = "Vamos encontrar o carro certo hoje",
   onMenuToggle,
 }: HeaderProps) {
+  const router = useRouter();
   const initials = userName
     .split(" ")
     .map((n) => n[0])
@@ -26,6 +31,58 @@ export function Header({
   const hour = new Date().getHours();
   const autoGreeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
   const displayGreeting = greeting ?? `${autoGreeting}, ${userName}!`;
+
+  /* Avatar dropdown menu */
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const avatarRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    function updatePosition() {
+      const btn = avatarRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      const menuWidth = menuRef.current?.offsetWidth ?? 180;
+      const left = Math.max(8, rect.right - menuWidth);
+      const top = rect.bottom + 8;
+      setPos({ top, left });
+    }
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      const t = e.target as Node;
+      if (avatarRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function handleEsc(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [open]);
+
+  async function handleSignOut() {
+    setOpen(false);
+    await signOut({ redirect: false });
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <header className="sticky top-0 z-30 flex items-center h-[64px] px-4 md:px-8 bg-background border-b border-[#F3F4F6]">
@@ -68,12 +125,46 @@ export function Header({
           <Bell className="h-[16px] w-[16px]" />
           <span className="absolute top-0.5 right-0.5 w-[9px] h-[9px] bg-[var(--primary)] rounded-full border-[1.5px] border-background" />
         </button>
-        <Avatar className="h-9 w-9 ml-1 cursor-pointer ring-2 ring-transparent hover:ring-[var(--primary)]/15 transition-all">
-          <AvatarFallback className="bg-[var(--primary)] text-white text-[12px] font-semibold">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+
+        {/* Avatar com dropdown */}
+        <button
+          ref={avatarRef}
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="ml-1 rounded-full ring-2 ring-transparent hover:ring-[var(--primary)]/15 transition-all"
+          aria-haspopup="menu"
+          aria-expanded={open}
+        >
+          <Avatar className="h-9 w-9 cursor-pointer">
+            <AvatarFallback className="bg-[var(--primary)] text-white text-[12px] font-semibold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+        </button>
       </div>
+
+      {/* Menu dropdown em portal */}
+      {mounted && open && pos && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          className="fixed z-[100] bg-white rounded-[10px] shadow-lg shadow-black/10 border border-[#EEF0F3] py-1.5 min-w-[180px]"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          {/* Header com nome do usuário */}
+          <div className="px-3 py-2 border-b border-[#F3F4F6] mb-1">
+            <p className="text-[13px] font-semibold text-[#111827] truncate">{userName}</p>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-[#E5484D] hover:bg-red-50 transition-colors text-left"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Sair
+          </button>
+        </div>,
+        document.body
+      )}
     </header>
   );
 }
