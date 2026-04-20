@@ -154,6 +154,8 @@ export async function PATCH(
             price: offer.price, city: offer.city, state: offer.state,
             active: true,
             external_status: offer.externalStatus ?? null,
+            external_seller_name: offer.externalSellerName ?? null,
+            external_dealership_name: offer.externalDealershipName ?? null,
             synced_at: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : new Date().toISOString(),
           }, { onConflict: "source,source_id" }).select("id").single();
           if (upserted) offerId = upserted.id as string;

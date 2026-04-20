@@ -229,14 +229,24 @@ function MatchesContent() {
                       className="grid gap-1.5 px-3 items-center min-h-[60px] hover:bg-[#FAFBFC] transition-colors w-full max-w-full"
                       style={{ gridTemplateColumns: gridTemplate }}
                     >
-                      {/* Veículo (+ versão como subtexto, SEM "Para cliente") */}
+                      {/* Veículo + concessionaria/vendedor como subtexto */}
                       <div className="min-w-0 overflow-hidden">
-                        <p className="text-[13px] font-semibold text-[#111827] leading-tight truncate" title={`${offer.brand} ${offer.model}`}>
+                        <p className="text-[13px] font-semibold text-[#111827] leading-tight truncate" title={`${offer.brand} ${offer.model}${offer.version ? " · " + offer.version : ""}`}>
                           {offer.brand as string} {offer.model as string}
                         </p>
-                        <p className="text-[11px] text-[#9AA0AB] leading-tight mt-0.5 truncate" title={(offer.version as string) || undefined}>
-                          {offer.version ? (offer.version as string) : "—"}
-                        </p>
+                        {(() => {
+                          const dealership = offer.external_dealership_name as string | null;
+                          const seller = offer.external_seller_name as string | null;
+                          const parts: string[] = [];
+                          if (dealership) parts.push(dealership);
+                          if (seller) parts.push(seller);
+                          const sub = parts.length > 0 ? parts.join(" · ") : (offer.version as string) || "—";
+                          return (
+                            <p className="text-[11px] text-[#9AA0AB] leading-tight mt-0.5 truncate" title={sub}>
+                              {sub}
+                            </p>
+                          );
+                        })()}
                       </div>
 
                       {/* Score */}
@@ -317,6 +327,11 @@ function MatchesContent() {
                       {offer.version ? (
                         <p className="text-[12px] text-[#9AA0AB] truncate">{offer.version as string}</p>
                       ) : null}
+                      {(offer.external_dealership_name || offer.external_seller_name) && (
+                        <p className="text-[12px] text-[#5B6370] truncate mt-0.5">
+                          {[offer.external_dealership_name as string | null, offer.external_seller_name as string | null].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
                       <p className="text-[12px] text-[#9AA0AB] truncate mt-1">
                         {offer.year as number} · {((offer.km as number) ?? 0).toLocaleString("pt-BR")} km
                         {syncedAt ? ` · avaliado em ${formatDate(syncedAt)}` : ""}

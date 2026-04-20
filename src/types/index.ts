@@ -105,6 +105,10 @@ export interface Offer {
   syncedAt: Date;
   /** Status original da fonte externa (ex: "Avaliado", "Publicado", "Pendente" do Avaliador Digital) */
   externalStatus?: string;
+  /** Nome do vendedor/avaliador responsável (da fonte externa) */
+  externalSellerName?: string;
+  /** Nome da concessionária/unidade (da fonte externa) */
+  externalDealershipName?: string;
 }
 
 export interface Match {

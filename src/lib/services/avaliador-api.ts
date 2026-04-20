@@ -25,6 +25,8 @@ interface AvaliadorVehicle {
   data_atualizacao: string;
   cidade: string;
   uf: string;
+  vendedor?: string | null;
+  concessionaria?: string | null;
 }
 
 interface AvaliadorResponse {
@@ -76,6 +78,8 @@ function vehicleToOffer(v: AvaliadorVehicle, _index: number): Offer {
     active: true,
     syncedAt: new Date(v.data_atualizacao),
     externalStatus: v.status,
+    externalSellerName: v.vendedor?.trim() || undefined,
+    externalDealershipName: v.concessionaria?.trim() || undefined,
   };
 }
 
