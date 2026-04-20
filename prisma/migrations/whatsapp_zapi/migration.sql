@@ -30,7 +30,7 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 -- ======================================================================
 
 CREATE TABLE IF NOT EXISTS "conversation_sessions" (
-  "id"              TEXT PRIMARY KEY,
+  "id"              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "seller_id"       TEXT,
   "phone_e164"      VARCHAR(32) NOT NULL,
   "state"           "ConversationState" NOT NULL DEFAULT 'idle',
@@ -52,7 +52,7 @@ CREATE INDEX IF NOT EXISTS "conversation_sessions_expires_at_idx"  ON "conversat
 -- ======================================================================
 
 CREATE TABLE IF NOT EXISTS "whatsapp_inbound_messages" (
-  "id"                   TEXT PRIMARY KEY,
+  "id"                   TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "provider_message_id"  VARCHAR(100) NOT NULL UNIQUE,
   "phone_e164"           VARCHAR(32) NOT NULL,
   "seller_id"            TEXT,
@@ -82,7 +82,7 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 -- ======================================================================
 
 CREATE TABLE IF NOT EXISTS "whatsapp_outbound_messages" (
-  "id"                   TEXT PRIMARY KEY,
+  "id"                   TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "phone_e164"           VARCHAR(32) NOT NULL,
   "recipient_id"         TEXT,
   "recipient_type"       VARCHAR(20),
@@ -108,7 +108,7 @@ CREATE INDEX IF NOT EXISTS "whatsapp_outbound_messages_provider_message_id_idx" 
 -- ======================================================================
 
 CREATE TABLE IF NOT EXISTS "match_groups" (
-  "id"            TEXT PRIMARY KEY,
+  "id"            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "wish_id"       TEXT NOT NULL,
   "seller_id"     TEXT NOT NULL,
   "matches"       JSONB NOT NULL,
@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS "feature_flags" (
 -- ======================================================================
 
 CREATE TABLE IF NOT EXISTS "feature_flag_history" (
-  "id"         TEXT PRIMARY KEY,
+  "id"         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "flag_key"   VARCHAR(100) NOT NULL,
   "old_value"  JSONB,
   "new_value"  JSONB,
