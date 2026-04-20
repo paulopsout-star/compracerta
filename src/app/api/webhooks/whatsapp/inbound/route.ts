@@ -99,8 +99,14 @@ export async function POST(req: NextRequest) {
   // Processa fora do caminho crítico — ACK rápido
   runAfter(async () => {
     console.log("[Webhook inbound] processInbound start", { messageId: env.providerMessageId });
-    const result = await processInbound(env);
-    console.log("[Webhook inbound] processInbound done", { messageId: env.providerMessageId, outcome: result.outcome, reason: result.reason });
+    try {
+      const result = await processInbound(env);
+      console.log("[Webhook inbound] processInbound done", { messageId: env.providerMessageId, outcome: result.outcome, reason: result.reason });
+    } catch (err) {
+      console.error("[Webhook inbound] processInbound THROW:",
+        err instanceof Error ? err.message : String(err),
+        err instanceof Error ? err.stack : "");
+    }
   });
 
   return NextResponse.json({ ack: true, messageId: payload.messageId });
