@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
 import { wishSchema } from "@/lib/validators/wish";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
-import { fetchExternalOffersForWish } from "@/lib/services/avaliador-api";
+import { fetchExternalOffersForWish, buildPresentSourceIdsSet } from "@/lib/services/avaliador-api";
+import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
 import type { Wish, Offer } from "@/types";
 
 interface ImmediateMatch {
@@ -110,6 +111,10 @@ export async function POST(request: NextRequest) {
       // Fetch local offers (lojistas) + external (Avaliador Digital)
       const { data: localOffers } = await supabase.from("offers").select("*").eq("active", true);
       const external = await fetchExternalOffersForWish(wish);
+
+      // Cleanup: remove matches antigos que apontam para offers que sumiram da API
+      const presentIdsBySource = buildPresentSourceIdsSet(external);
+      await cleanupStaleMatchesForWish(wish.id, presentIdsBySource);
 
       console.log(`[Desejo] Ofertas: ${(localOffers ?? []).length} locais + ${external.length} externas = ${(localOffers ?? []).length + external.length} total`);
 

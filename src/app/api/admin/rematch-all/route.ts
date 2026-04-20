@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
-import { fetchExternalOffersForWish } from "@/lib/services/avaliador-api";
+import { fetchExternalOffersForWish, buildPresentSourceIdsSet } from "@/lib/services/avaliador-api";
+import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
 import type { Wish, Offer } from "@/types";
 
 /**
@@ -57,6 +58,10 @@ export async function POST() {
   for (const wish of wishes) {
     try {
       const external = await fetchExternalOffersForWish(wish);
+
+      // Cleanup: remove matches antigos que apontam para offers que sumiram da API
+      const presentIdsBySource = buildPresentSourceIdsSet(external);
+      await cleanupStaleMatchesForWish(wish.id, presentIdsBySource);
       const { data: localOffers } = await supabase.from("offers").select("*").eq("active", true);
 
       const allOffers: Offer[] = [

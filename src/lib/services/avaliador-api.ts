@@ -178,6 +178,21 @@ export async function fetchExternalOffersForWish(wish: Wish): Promise<Offer[]> {
     .flatMap((r) => r.value);
 }
 
+/**
+ * Retorna um Set com todos os source_ids externos (por source) que
+ * estao presentes na lista de offers retornadas.
+ * Usado para detectar matches orfaos (que apontam para offers que
+ * sumiram da API externa).
+ */
+export function buildPresentSourceIdsSet(offers: Offer[]): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const o of offers) {
+    if (!map.has(o.source)) map.set(o.source, new Set());
+    map.get(o.source)!.add(o.sourceId);
+  }
+  return map;
+}
+
 /** Health check for integrations page */
 export async function checkAvaliadorHealth(): Promise<{
   status: "online" | "desabilitado" | "erro";
