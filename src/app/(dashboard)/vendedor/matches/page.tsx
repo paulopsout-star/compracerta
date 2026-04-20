@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Zap, Loader2, X, ArrowLeft, MapPin, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
+import { Zap, Loader2, X, ArrowLeft, MapPin, ArrowUp, ArrowDown, ChevronsUpDown, Info } from "lucide-react";
 
 type SortDir = "asc" | "desc" | null;
 type SortKey = "vehicle" | "score" | "status" | "year" | "km" | "date" | "location" | "price" | null;
@@ -70,6 +70,7 @@ function MatchesContent() {
   const [matches, setMatches] = useState<Record<string, unknown>[]>([]);
   const [wishInfo, setWishInfo] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailsOffer, setDetailsOffer] = useState<Record<string, unknown> | null>(null);
 
   // Sorting — default: por score descendente
   const [sortKey, setSortKey] = useState<SortKey>("score");
@@ -132,9 +133,9 @@ function MatchesContent() {
     return sorted;
   }, [matches, sortKey, sortDir]);
 
-  // Soma fixa: 56 + 92 + 56 + 82 + 62 + 100 + 90 + 88 = 626
-  // + veiculo min 140 + gaps + padding = ~814
-  const gridTemplate = "minmax(140px, 1fr) 56px 92px 56px 82px 62px 100px 90px 88px";
+  // Soma fixa: 56 + 92 + 56 + 82 + 62 + 100 + 90 + 118 = 656
+  // + veiculo min 140 + gaps + padding = ~844
+  const gridTemplate = "minmax(140px, 1fr) 56px 92px 56px 82px 62px 100px 90px 118px";
 
   return (
     <DashboardLayout role="vendedor" subtitle={subtitle}>
@@ -238,11 +239,14 @@ function MatchesContent() {
                           const dealership = offer.external_dealership_name as string | null;
                           const seller = offer.external_seller_name as string | null;
                           const parts: string[] = [];
-                          if (dealership) parts.push(dealership);
                           if (seller) parts.push(seller);
+                          if (dealership) parts.push(dealership);
                           const sub = parts.length > 0 ? parts.join(" · ") : (offer.version as string) || "—";
+                          const fullTitle = parts.length > 0
+                            ? [seller ? `Vendedor: ${seller}` : null, dealership ? `Concessionária: ${dealership}` : null].filter(Boolean).join("\n")
+                            : sub;
                           return (
-                            <p className="text-[11px] text-[#9AA0AB] leading-tight mt-0.5 truncate" title={sub}>
+                            <p className="text-[11px] text-[#9AA0AB] leading-tight mt-0.5 truncate" title={fullTitle}>
                               {sub}
                             </p>
                           );
@@ -292,8 +296,17 @@ function MatchesContent() {
                       </div>
 
                       {/* Ações */}
-                      <div className="flex items-center justify-end whitespace-nowrap">
-                        <button className="h-[28px] px-4 rounded-[6px] bg-[#2563EB] text-white text-[11px] font-semibold hover:brightness-90 transition-all">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setDetailsOffer(offer)}
+                          className="w-[28px] h-[28px] rounded-[6px] border border-[#E8EAEE] text-[#5B6370] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors flex items-center justify-center shrink-0"
+                          aria-label="Ver detalhes completos"
+                          title="Ver detalhes"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                        <button className="h-[28px] px-3 rounded-[6px] bg-[#2563EB] text-white text-[11px] font-semibold hover:brightness-90 transition-all">
                           Contatar
                         </button>
                       </div>
@@ -329,7 +342,7 @@ function MatchesContent() {
                       ) : null}
                       {(offer.external_dealership_name || offer.external_seller_name) ? (
                         <p className="text-[12px] text-[#5B6370] truncate mt-0.5">
-                          {[offer.external_dealership_name as string | null, offer.external_seller_name as string | null].filter(Boolean).join(" · ")}
+                          {[offer.external_seller_name as string | null, offer.external_dealership_name as string | null].filter(Boolean).join(" · ")}
                         </p>
                       ) : null}
                       <p className="text-[12px] text-[#9AA0AB] truncate mt-1">
@@ -342,8 +355,17 @@ function MatchesContent() {
                           <MapPin className="w-3 h-3" />{offer.city as string}/{offer.state as string}
                         </div>
                       </div>
-                      <div className="mt-3">
-                        <button className="w-full h-[34px] rounded-[8px] bg-[#2563EB] text-white text-[12px] font-semibold hover:brightness-90 transition-all">
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetailsOffer(offer)}
+                          className="h-[34px] px-3 rounded-[8px] border border-[#E8EAEE] text-[#5B6370] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors flex items-center justify-center gap-1.5 text-[12px] font-medium shrink-0"
+                          aria-label="Ver detalhes completos"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                          Detalhes
+                        </button>
+                        <button className="flex-1 h-[34px] rounded-[8px] bg-[#2563EB] text-white text-[12px] font-semibold hover:brightness-90 transition-all">
                           Contatar
                         </button>
                       </div>
@@ -355,6 +377,106 @@ function MatchesContent() {
           </>
         )}
       </div>
+
+      {/* Modal de Detalhes — exibe dados completos sem comprometer a lista */}
+      {detailsOffer ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setDetailsOffer(null)}
+        >
+          <div
+            className="bg-white rounded-[12px] shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-[#EEF0F3]">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] font-semibold">Detalhes do veículo</p>
+                <h3 className="text-[16px] font-semibold text-[#111827] mt-1 leading-tight">
+                  {detailsOffer.brand as string} {detailsOffer.model as string}
+                </h3>
+                {detailsOffer.version ? (
+                  <p className="text-[12px] text-[#5B6370] mt-0.5">{detailsOffer.version as string}</p>
+                ) : null}
+              </div>
+              <button
+                onClick={() => setDetailsOffer(null)}
+                className="w-8 h-8 rounded-[8px] hover:bg-[#F3F4F6] text-[#5B6370] flex items-center justify-center shrink-0"
+                aria-label="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4 text-[13px]">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Ano</p>
+                  <p className="text-[#111827] font-medium">{(detailsOffer.year as number) ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">KM</p>
+                  <p className="text-[#111827] font-medium">{((detailsOffer.km as number) ?? 0).toLocaleString("pt-BR")}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Cor</p>
+                  <p className="text-[#111827] font-medium">{(detailsOffer.color as string) || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Preço</p>
+                  <p className="text-[#2563EB] font-semibold">{fmt(detailsOffer.price as number)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Localização</p>
+                  <p className="text-[#111827] font-medium">{detailsOffer.city as string}/{detailsOffer.state as string}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Data da avaliação</p>
+                  <p className="text-[#111827] font-medium">
+                    {detailsOffer.synced_at ? formatDate(detailsOffer.synced_at as string) : "—"}
+                  </p>
+                </div>
+              </div>
+
+              {(detailsOffer.external_seller_name || detailsOffer.external_dealership_name || detailsOffer.external_status) ? (
+                <div className="border-t border-[#EEF0F3] pt-4 space-y-3">
+                  {detailsOffer.external_status ? (
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Status da avaliação</p>
+                      <p className="text-[#111827] font-medium">{detailsOffer.external_status as string}</p>
+                    </div>
+                  ) : null}
+                  {detailsOffer.external_seller_name ? (
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Vendedor</p>
+                      <p className="text-[#111827] font-medium break-words">{detailsOffer.external_seller_name as string}</p>
+                    </div>
+                  ) : null}
+                  {detailsOffer.external_dealership_name ? (
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Concessionária</p>
+                      <p className="text-[#111827] font-medium break-words">{detailsOffer.external_dealership_name as string}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="px-5 pb-5 pt-2 flex items-center gap-2">
+              <button
+                onClick={() => setDetailsOffer(null)}
+                className="flex-1 h-[40px] rounded-[8px] border border-[#E8EAEE] text-[#5B6370] text-[13px] font-medium hover:border-[#2563EB] hover:text-[#2563EB] transition-colors"
+              >
+                Fechar
+              </button>
+              <button
+                className="flex-1 h-[40px] rounded-[8px] bg-[#2563EB] text-white text-[13px] font-semibold hover:brightness-90 transition-all"
+              >
+                Contatar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashboardLayout>
   );
 }
