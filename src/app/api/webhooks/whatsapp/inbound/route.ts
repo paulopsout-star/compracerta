@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { processInbound, type InboundEnvelope } from "@/lib/conversation/inbound-processor";
+import { supabase } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,6 +86,21 @@ export async function POST(req: NextRequest) {
     receivedAt: payload.momment ? new Date(payload.momment * 1000) : new Date(),
     rawPayload: payload,
   };
+
+  // DEBUG: insert direto no DB antes de qualquer outra coisa. Se esse log
+  // aparecer no DB mas processInbound não, sabemos que o problema está
+  // especificamente no processador (e não em rede/DB/build).
+  try {
+    const { error: debugError } = await supabase.from("whatsapp_inbound_messages").insert({
+      provider_message_id: `debug-route-${env.providerMessageId}`,
+      phone_e164: env.phoneRaw,
+      content: env.text ?? "(debug: inline insert before processInbound)",
+      received_at: env.receivedAt.toISOString(),
+    });
+    console.log("[Webhook inbound] DEBUG inline insert:", debugError ? debugError.message : "OK");
+  } catch (err) {
+    console.error("[Webhook inbound] DEBUG inline insert THROW:", err);
+  }
 
   // Processa inline — `after()` do Next.js 16 está sendo truncado no runtime
   // Vercel (callback agendado mas morre antes do await resolver). Trade-off:
