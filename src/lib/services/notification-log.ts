@@ -62,6 +62,12 @@ export async function recordNotification(input: RecordNotificationInput): Promis
       .select("id")
       .single();
     if (error) {
+      // 23505 = unique_violation: corrida entre runs concorrentes — alguém
+      // já registrou a mesma notificação. Não é erro real.
+      if (error.code === "23505") {
+        console.log("[notification-log] já existe notificação enviada para este match — ignorando");
+        return null;
+      }
       console.warn("[notification-log] insert failed:", error.message);
       return null;
     }
