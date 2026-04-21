@@ -7,9 +7,11 @@
  */
 
 import { supabase } from "@/lib/db";
-import { isEnabled } from "@/lib/feature-flags";
+import { getNumber, isEnabled } from "@/lib/feature-flags";
 import { sendText } from "@/lib/services/whatsapp";
 import { createWish, findDuplicate, hasReachedDailyLimit, updateWish } from "@/lib/services/wish-service";
+import { runMatchingForWish, type MatchSummary } from "@/lib/services/match-runner";
+import type { Offer } from "@/types";
 import { extract, type ExtractedFields, type ExtractionResult } from "@/lib/conversation/extractor";
 import { extractWithClaude } from "@/lib/services/llm";
 import { touchSession, type ConversationSessionRow, type SessionState } from "@/lib/conversation/session-store";
@@ -278,6 +280,101 @@ async function sendCadastroConfirmado(session: ConversationSessionRow, user: Aut
   );
 }
 
+function originLabel(offer: Offer): { label: string; detalhes: string } {
+  switch (offer.source) {
+    case "avaliador":
+      return {
+        label: "Avaliador Digital",
+        detalhes: `${offer.externalDealershipName ?? "—"} (${offer.city}/${offer.state})`,
+      };
+    case "marketplace":
+      return { label: "Marketplace", detalhes: `${offer.city}/${offer.state}` };
+    case "estoque_lojista":
+      return { label: "Estoque lojista", detalhes: `${offer.city}/${offer.state}` };
+    default:
+      return { label: "Fonte externa", detalhes: `${offer.city}/${offer.state}` };
+  }
+}
+
+async function notifyMatch(
+  session: ConversationSessionRow,
+  user: AuthenticatedUser,
+  matches: MatchSummary[]
+): Promise<void> {
+  if (!(await isEnabled("match.auto_notify.enabled"))) return;
+  if (matches.length === 0) return;
+  const minScore = await getNumber("match.min_score_threshold", 70);
+  const top = matches[0];
+  if (top.score < minScore) return;
+
+  const { label: origemLabel, detalhes: origemDetalhes } = originLabel(top.offer);
+  const alt = matches.length - 1;
+
+  const body = renderTemplate("match_encontrado", {
+    marca: top.offer.brand,
+    modelo: top.offer.model,
+    versao: top.offer.version ?? "",
+    ano: top.offer.year,
+    km_formatted: top.offer.km.toLocaleString("pt-BR"),
+    cor: top.offer.color ?? "—",
+    preco_formatted: top.offer.price.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    score: Math.round(top.score),
+    score_detalhamento_bullets: "",
+    origem_label: origemLabel,
+    origem_detalhes: origemDetalhes,
+    status_veiculo: top.offer.externalStatus ?? "Ativo",
+    contato_nome: top.offer.externalSellerName ?? "—",
+    contato_telefone: "—",
+    alternativas_linha: alt > 0 ? `_Temos mais ${alt} alternativa${alt > 1 ? "s" : ""} — envie *próximo* para ver._` : "",
+    alt_count: alt,
+  });
+
+  await sendText(session.phoneE164, body, {
+    recipientId: user.id,
+    recipientType: "vendedor",
+    templateName: "match_encontrado",
+  });
+}
+
+async function runMatchAndNotify(
+  wishId: string,
+  session: ConversationSessionRow,
+  user: AuthenticatedUser,
+  draft: DraftWish
+): Promise<void> {
+  try {
+    const matches = await runMatchingForWish(wishId);
+    if (matches.length > 0) {
+      await notifyMatch(session, user, matches);
+    } else {
+      await sendSemMatch(session, user, draft);
+    }
+  } catch (err) {
+    console.error("[Orchestrator] runMatching falhou:", err instanceof Error ? err.message : err);
+    // não-fatal: cadastro já foi confirmado em mensagem anterior
+  }
+}
+
+async function sendSemMatch(
+  session: ConversationSessionRow,
+  user: AuthenticatedUser,
+  draft: DraftWish
+): Promise<void> {
+  const anoRange = draft.anoMin && draft.anoMax
+    ? (draft.anoMin === draft.anoMax ? `${draft.anoMin}` : `${draft.anoMin}–${draft.anoMax}`)
+    : "—";
+  await sendText(
+    session.phoneE164,
+    renderTemplate("sem_match", {
+      marca: draft.marca ?? "",
+      modelo: draft.modelo ?? "",
+      ano_range: anoRange,
+      validade_dias: 30,
+    }),
+    { recipientId: user.id, recipientType: "vendedor", templateName: "sem_match" }
+  );
+}
+
 /**
  * Ponto único de processamento de turno — chamado pelo inbound-processor.
  */
@@ -328,6 +425,7 @@ export async function processTurn(input: TurnInput): Promise<void> {
             `✅ Desejo atualizado com sucesso!\n\n*${draft.marca} ${draft.modelo}*\nID: #${pendingDupId.slice(-6)}\n\nVou recomeçar a busca com os novos dados.`,
             { recipientId: user.id, recipientType: "vendedor", templateName: "duplicata_atualizado" }
           );
+          await runMatchAndNotify(pendingDupId, session, user, draft);
         } catch (err) {
           console.error("[Orchestrator] updateWish failed:", err);
           await sendText(session.phoneE164, "Tive um problema ao atualizar. Pode tentar de novo em alguns segundos?", {
@@ -347,6 +445,7 @@ export async function processTurn(input: TurnInput): Promise<void> {
           const id = await persistWish(user, draft);
           await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
           await sendCadastroConfirmado(session, user, draft, id);
+          await runMatchAndNotify(id, session, user, draft);
         } catch (err) {
           console.error("[Orchestrator] force-create wish failed:", err);
           await sendText(session.phoneE164, "Tive um problema ao cadastrar. Pode tentar de novo em alguns segundos?", {
@@ -398,6 +497,7 @@ export async function processTurn(input: TurnInput): Promise<void> {
         const id = await persistWish(user, draft);
         await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
         await sendCadastroConfirmado(session, user, draft, id);
+        await runMatchAndNotify(id, session, user, draft);
       } catch (err) {
         console.error("[Orchestrator] persistWish failed:", err);
         await sendText(
