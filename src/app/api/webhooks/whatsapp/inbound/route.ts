@@ -36,29 +36,54 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-function verifySignature(req: NextRequest): boolean {
+/**
+ * Z-API via API (vs painel) não permite configurar header customizado. Aceitamos
+ * qualquer uma das duas autenticações:
+ * 1) Header X-Zapi-Signature bate com ZAPI_WEBHOOK_SECRET (alta segurança — quem
+ *    configurou webhook via painel deve usar essa)
+ * 2) payload.instanceId bate com ZAPI_INSTANCE_ID (fallback — Z-API sempre envia
+ *    esse campo; um attacker teria que descobrir o ID, que não é público)
+ */
+function verifyAuth(req: NextRequest, payload: { instanceId?: string }): boolean {
   const secret = process.env.ZAPI_WEBHOOK_SECRET;
-  if (!secret) {
-    // Dev/staging — aceita sem secret mas avisa
-    console.warn("[Webhook inbound] ZAPI_WEBHOOK_SECRET não configurado — aceitando request sem validação");
+  const expectedInstanceId = process.env.ZAPI_INSTANCE_ID?.trim();
+
+  // Caminho 1: header HMAC
+  if (secret) {
+    const header = req.headers.get("x-zapi-signature") ?? req.headers.get("X-Zapi-Signature") ?? "";
+    if (header && timingSafeEqual(header, secret)) return true;
+  }
+
+  // Caminho 2: instanceId bate
+  if (expectedInstanceId && payload.instanceId && payload.instanceId === expectedInstanceId) {
     return true;
   }
-  const header = req.headers.get("x-zapi-signature") ?? req.headers.get("X-Zapi-Signature") ?? "";
-  return timingSafeEqual(header, secret);
+
+  // Dev: se nada configurado, aceita
+  if (!secret && !expectedInstanceId) {
+    console.warn("[Webhook inbound] sem ZAPI_WEBHOOK_SECRET nem ZAPI_INSTANCE_ID — aceitando sem validação");
+    return true;
+  }
+
+  return false;
 }
 
 export async function POST(req: NextRequest) {
   console.log("[Webhook inbound] POST received", { ts: new Date().toISOString() });
-  if (!verifySignature(req)) {
-    console.warn("[Webhook inbound] assinatura inválida");
-    return NextResponse.json({ ack: false, error: "invalid_signature" }, { status: 401 });
-  }
 
   let payload: ZapiInboundPayload;
   try {
     payload = (await req.json()) as ZapiInboundPayload;
   } catch {
     return NextResponse.json({ ack: false, error: "invalid_json" }, { status: 400 });
+  }
+
+  if (!verifyAuth(req, payload)) {
+    console.warn("[Webhook inbound] autenticação falhou", {
+      hasHeader: !!req.headers.get("x-zapi-signature"),
+      payloadInstanceId: payload.instanceId,
+    });
+    return NextResponse.json({ ack: false, error: "invalid_signature" }, { status: 401 });
   }
 
   // Filtros obrigatórios

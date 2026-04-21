@@ -28,11 +28,16 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-function verifySignature(req: NextRequest): boolean {
+function verifyAuth(req: NextRequest, payload: { instanceId?: string }): boolean {
   const secret = process.env.ZAPI_WEBHOOK_SECRET;
-  if (!secret) return true;
-  const header = req.headers.get("x-zapi-signature") ?? req.headers.get("X-Zapi-Signature") ?? "";
-  return timingSafeEqual(header, secret);
+  const expectedInstanceId = process.env.ZAPI_INSTANCE_ID?.trim();
+  if (secret) {
+    const header = req.headers.get("x-zapi-signature") ?? req.headers.get("X-Zapi-Signature") ?? "";
+    if (header && timingSafeEqual(header, secret)) return true;
+  }
+  if (expectedInstanceId && payload.instanceId === expectedInstanceId) return true;
+  if (!secret && !expectedInstanceId) return true;
+  return false;
 }
 
 function mapStatus(s: string | undefined): { status?: string; delivered?: boolean; read?: boolean; failed?: boolean } {
@@ -69,14 +74,14 @@ async function applyStatus(payload: ZapiStatusPayload) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifySignature(req)) {
-    return NextResponse.json({ ack: false, error: "invalid_signature" }, { status: 401 });
-  }
   let payload: ZapiStatusPayload;
   try {
     payload = (await req.json()) as ZapiStatusPayload;
   } catch {
     return NextResponse.json({ ack: false, error: "invalid_json" }, { status: 400 });
+  }
+  if (!verifyAuth(req, payload)) {
+    return NextResponse.json({ ack: false, error: "invalid_signature" }, { status: 401 });
   }
   try {
     await applyStatus(payload);
