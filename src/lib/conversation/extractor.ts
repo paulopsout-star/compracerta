@@ -302,12 +302,22 @@ function detectIntent(text: string, state?: string): { intent: Intent; confidenc
     }
   }
 
-  if (/^(ajuda|help|menu|\?|comandos)$/i.test(norm)) return { intent: "ajuda", confidence: 0.98 };
-  if (/^(status|meus desejos|o que tenho ativo|ativos)$/i.test(norm)) return { intent: "ver_status", confidence: 0.95 };
-  if (/^(cancelar|cancela|para|esquece|deixa pra l[aá])$/i.test(norm)) return { intent: "cancelar", confidence: 0.9 };
+  if (/^(ajuda|help|menu|\?|comandos|op[cç][oõ]es)$/i.test(norm)) return { intent: "ajuda", confidence: 0.98 };
+
+  // Status / meus desejos / matches / acompanhar — cobertura ampla
+  if (/^(ver (meus |os )?desejos( ativos)?|desejos ativos|meus desejos( ativos)?|status|o que tenho ativo|ativos|(ver |acompanhar )?matches( encontrados)?|meus matches|acompanhar)$/i.test(norm)) {
+    return { intent: "ver_status", confidence: 0.95 };
+  }
+
+  if (/^(cancelar|cancela|para|esquece|deixa pra l[aá]|desistir)$/i.test(norm)) return { intent: "cancelar", confidence: 0.9 };
   if (/^(retomar|continuar( cadastro)?|de onde parei)$/i.test(norm)) return { intent: "retomar", confidence: 0.9 };
   if (/^(pr[oó]xim[oa]|mais op[cç][oõ]es|\d)$/i.test(norm) && state === "viewing_matches")
     return { intent: "ver_mais_opcoes", confidence: 0.9 };
+
+  // Cadastrar novo desejo — gatilhos explícitos (sem ter que informar marca/modelo já)
+  if (/^(cadastrar( um)?( novo)? desejo( de cliente)?|novo desejo|quero cadastrar|registrar desejo|criar desejo|adicionar desejo|tenho (um )?cliente(\b.*)?|novo cliente)$/i.test(norm)) {
+    return { intent: "criar_desejo", confidence: 0.9 };
+  }
 
   // Criar/continuar — heurística: se tem marca/modelo/ano/preço/telefone, é criação
   const hasSignal =
