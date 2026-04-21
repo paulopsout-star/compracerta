@@ -12,6 +12,8 @@ import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
 import type { Wish, Offer } from "@/types";
 
 export interface MatchSummary {
+  /** id da linha em `matches` (após upsert) — usado para auditoria em notifications */
+  matchId: string;
   score: number;
   offer: Offer;
   /** true quando não existia linha em matches para (wish, offer) antes deste run */
@@ -173,14 +175,17 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
     }
 
     const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
-    await supabase
+    const { data: matchRow } = await supabase
       .from("matches")
       .upsert(
         { wish_id: wish.id, offer_id: offerId, score: result.score, status: matchStatus },
         { onConflict: "wish_id,offer_id" }
-      );
+      )
+      .select("id")
+      .single();
 
     matches.push({
+      matchId: (matchRow?.id as string) ?? "",
       score: result.score,
       offer: { ...offer, id: offerId },
       isNew: !existingOfferIds.has(offerId),

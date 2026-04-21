@@ -11,6 +11,7 @@ import { getNumber, isEnabled } from "@/lib/feature-flags";
 import { sendText } from "@/lib/services/whatsapp";
 import { createWish, findDuplicate, hasReachedDailyLimit, updateWish } from "@/lib/services/wish-service";
 import { runMatchingForWish, type MatchSummary } from "@/lib/services/match-runner";
+import { hasBeenNotified, recordNotification } from "@/lib/services/notification-log";
 import type { Offer } from "@/types";
 import { extract, type ExtractedFields, type ExtractionResult } from "@/lib/conversation/extractor";
 import { extractWithClaude } from "@/lib/services/llm";
@@ -307,6 +308,11 @@ async function notifyMatch(
   const top = matches[0];
   if (top.score < minScore) return;
 
+  // Idempotência: se já notificamos este match via WhatsApp, não re-envia
+  if (top.matchId && await hasBeenNotified(top.matchId, "whatsapp")) {
+    return;
+  }
+
   const { label: origemLabel, detalhes: origemDetalhes } = originLabel(top.offer);
   const alt = matches.length - 1;
 
@@ -329,11 +335,22 @@ async function notifyMatch(
     alt_count: alt,
   });
 
-  await sendText(session.phoneE164, body, {
+  const result = await sendText(session.phoneE164, body, {
     recipientId: user.id,
     recipientType: "vendedor",
     templateName: "match_encontrado",
   });
+
+  if (top.matchId) {
+    await recordNotification({
+      matchId: top.matchId,
+      recipientId: user.id,
+      channel: "whatsapp",
+      template: "match_encontrado",
+      content: body,
+      status: result.status === "sent" ? "enviado" : result.status === "failed" ? "erro" : "pendente",
+    });
+  }
 }
 
 async function runMatchAndNotify(

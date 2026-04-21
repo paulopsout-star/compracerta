@@ -15,6 +15,7 @@ import { getNumber, isEnabled } from "@/lib/feature-flags";
 import { runMatchingForWish, type MatchSummary } from "@/lib/services/match-runner";
 import { sendText } from "@/lib/services/whatsapp";
 import { renderTemplate } from "@/lib/whatsapp-templates";
+import { hasBeenNotified, recordNotification } from "@/lib/services/notification-log";
 import type { Offer } from "@/types";
 
 export const runtime = "nodejs";
@@ -53,12 +54,20 @@ function originLabel(offer: Offer): { label: string; detalhes: string } {
   }
 }
 
+/**
+ * Envia notification para o vendedor e registra em notifications.
+ * Retorna false se já havia registro prévio (skip idempotente).
+ */
 async function notifySellerForNewMatch(
   sellerId: string,
   sellerPhone: string,
   top: MatchSummary,
   totalMatches: number
-): Promise<void> {
+): Promise<boolean> {
+  if (top.matchId && await hasBeenNotified(top.matchId, "whatsapp")) {
+    return false;
+  }
+
   const { label: origemLabel, detalhes: origemDetalhes } = originLabel(top.offer);
   const alt = totalMatches - 1;
 
@@ -81,11 +90,23 @@ async function notifySellerForNewMatch(
     alt_count: alt,
   });
 
-  await sendText(sellerPhone, body, {
+  const result = await sendText(sellerPhone, body, {
     recipientId: sellerId,
     recipientType: "vendedor",
     templateName: "match_encontrado",
   });
+
+  if (top.matchId) {
+    await recordNotification({
+      matchId: top.matchId,
+      recipientId: sellerId,
+      channel: "whatsapp",
+      template: "match_encontrado",
+      content: body,
+      status: result.status === "sent" ? "enviado" : result.status === "failed" ? "erro" : "pendente",
+    });
+  }
+  return result.status === "sent";
 }
 
 export async function GET(req: NextRequest) {
@@ -140,8 +161,7 @@ export async function GET(req: NextRequest) {
         if (topNew && autoNotify) {
           const seller = sellerPhoneMap.get(w.seller_id);
           if (seller?.active && seller.phone) {
-            await notifySellerForNewMatch(w.seller_id, seller.phone, topNew, matches.length);
-            notified = true;
+            notified = await notifySellerForNewMatch(w.seller_id, seller.phone, topNew, matches.length);
           }
         }
 
