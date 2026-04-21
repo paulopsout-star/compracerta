@@ -14,6 +14,8 @@ import type { Wish, Offer } from "@/types";
 export interface MatchSummary {
   score: number;
   offer: Offer;
+  /** true quando não existia linha em matches para (wish, offer) antes deste run */
+  isNew: boolean;
 }
 
 interface DbWishRow {
@@ -123,6 +125,14 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
     console.warn("[match-runner] cleanup falhou:", err instanceof Error ? err.message : err);
   }
 
+  // Snapshot dos matches que já existem para este desejo — usado para marcar
+  // isNew (permite ao caller notificar apenas matches recém-descobertos).
+  const { data: existingRows } = await supabase
+    .from("matches")
+    .select("offer_id")
+    .eq("wish_id", wish.id);
+  const existingOfferIds = new Set((existingRows ?? []).map((r) => r.offer_id as string));
+
   const all: Offer[] = [...localOffers, ...external];
   const matches: MatchSummary[] = [];
 
@@ -170,7 +180,11 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
         { onConflict: "wish_id,offer_id" }
       );
 
-    matches.push({ score: result.score, offer: { ...offer, id: offerId } });
+    matches.push({
+      score: result.score,
+      offer: { ...offer, id: offerId },
+      isNew: !existingOfferIds.has(offerId),
+    });
   }
 
   matches.sort((a, b) => b.score - a.score);
