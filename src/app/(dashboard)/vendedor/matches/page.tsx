@@ -133,6 +133,32 @@ function MatchesContent() {
     return sorted;
   }, [matches, sortKey, sortDir]);
 
+  // Agrupa por desejo quando não há filtro explícito — evita misturar matches
+  // de clientes diferentes na mesma lista.
+  interface MatchGroup {
+    wishId: string;
+    wish: Record<string, unknown>;
+    items: Record<string, unknown>[];
+  }
+  const matchGroups = useMemo<MatchGroup[]>(() => {
+    if (wishId) return [{ wishId, wish: wishInfo ?? {}, items: sortedMatches }];
+    const map = new Map<string, MatchGroup>();
+    for (const m of sortedMatches) {
+      const wish = m.wishes as Record<string, unknown> | undefined;
+      if (!wish) continue;
+      const wid = wish.id as string;
+      const g = map.get(wid);
+      if (g) g.items.push(m);
+      else map.set(wid, { wishId: wid, wish, items: [m] });
+    }
+    // Ordena grupos por score do top match descendente (maior relevância primeiro)
+    return Array.from(map.values()).sort((a, b) => {
+      const sa = (a.items[0]?.score as number) ?? 0;
+      const sb = (b.items[0]?.score as number) ?? 0;
+      return sb - sa;
+    });
+  }, [wishId, wishInfo, sortedMatches]);
+
   // Soma fixa: 56 + 92 + 56 + 82 + 62 + 100 + 90 + 118 = 656
   // + veiculo min 140 + gaps + padding = ~844
   const gridTemplate = "minmax(140px, 1fr) 56px 92px 56px 82px 62px 100px 90px 118px";
@@ -193,7 +219,34 @@ function MatchesContent() {
             </p>
           </div>
         ) : (
-          <>
+          <div className="space-y-6">
+          {matchGroups.map((group) => (
+          <section key={group.wishId} className="space-y-2">
+            {/* Cabeçalho do grupo — só aparece quando não há filtro explícito por desejo */}
+            {!wishId && (
+              <div className="flex items-center justify-between gap-3 px-1 flex-wrap">
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <h3 className="text-[14px] font-semibold text-[#111827] truncate">
+                    {(group.wish.brand as string) ?? "—"} {(group.wish.model as string) ?? ""}
+                  </h3>
+                  {(group.wish.client_name as string) ? (
+                    <span className="text-[12px] text-[#9AA0AB]">
+                      · {group.wish.client_name as string}
+                    </span>
+                  ) : null}
+                  <span className="text-[11px] text-[#9AA0AB]">
+                    · {group.items.length} match{group.items.length === 1 ? "" : "es"}
+                  </span>
+                </div>
+                <Link
+                  href={`/vendedor/matches?wishId=${encodeURIComponent(group.wishId)}`}
+                  className="text-[11px] font-medium text-[#2563EB] hover:underline whitespace-nowrap"
+                >
+                  Ver só este desejo →
+                </Link>
+              </div>
+            )}
+
             {/* ─── Desktop ≥1024px: List view ─── */}
             <div className="card-tradox !p-0 overflow-hidden hidden lg:block w-full min-w-0 max-w-full">
               {/* Header — ordenavel */}
@@ -214,7 +267,7 @@ function MatchesContent() {
 
               {/* Rows */}
               <div className="divide-y divide-[#F3F4F6]">
-                {sortedMatches.map((m) => {
+                {group.items.map((m) => {
                   const offer = m.offers as Record<string, unknown> | undefined;
                   const wish = m.wishes as Record<string, unknown> | undefined;
                   if (!offer || !wish) return null;
@@ -319,7 +372,7 @@ function MatchesContent() {
             {/* ─── Mobile / Tablet <1024px: stacked ─── */}
             <div className="card-tradox !p-0 overflow-hidden lg:hidden">
               <div className="divide-y divide-[#F3F4F6]">
-                {matches.map((m) => {
+                {group.items.map((m) => {
                   const offer = m.offers as Record<string, unknown> | undefined;
                   const wish = m.wishes as Record<string, unknown> | undefined;
                   if (!offer || !wish) return null;
@@ -374,7 +427,9 @@ function MatchesContent() {
                 })}
               </div>
             </div>
-          </>
+          </section>
+          ))}
+          </div>
         )}
       </div>
 
