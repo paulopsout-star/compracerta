@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Users } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2, Users } from "lucide-react";
 
 type Role = "vendedor" | "gestor" | "lojista" | "admin";
 
@@ -212,24 +212,25 @@ export default function AdminUsuariosPage() {
         ) : (
           <div className="card-tradox !p-0 overflow-hidden">
             <div className="px-6 py-3 bg-[#F7F8FA] border-b border-[#EEF0F3]">
-              <div className="grid grid-cols-6 gap-4 text-[11px] font-medium text-[#9AA0AB] uppercase tracking-[0.4px]">
-                <span className="col-span-2">Nome / E-mail</span>
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 text-[11px] font-medium text-[#9AA0AB] uppercase tracking-[0.4px]">
+                <span>Nome / E-mail</span>
                 <span>Telefone</span>
                 <span>Perfil</span>
                 <span>Status</span>
                 <span>Criado em</span>
+                <span className="w-[88px] text-right">Ações</span>
               </div>
             </div>
             <div className="divide-y divide-[#EEF0F3]">
               {users.map((user) => {
                 const badge = ROLE_BADGES[user.role] ?? ROLE_BADGES.vendedor;
                 return (
-                  <button
+                  <div
                     key={user.id}
                     onClick={() => openEdit(user)}
-                    className="w-full grid grid-cols-6 gap-4 items-center px-6 py-4 hover:bg-[#F7F8FA]/50 transition-colors text-left"
+                    className="group grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 items-center px-6 py-4 hover:bg-[#F7F8FA]/50 transition-colors cursor-pointer"
                   >
-                    <div className="col-span-2">
+                    <div>
                       <p className="text-[14px] font-medium text-[#111827]">{user.name}</p>
                       <p className="text-[12px] text-[#9AA0AB]">{user.email}</p>
                     </div>
@@ -243,7 +244,15 @@ export default function AdminUsuariosPage() {
                     <span className="text-[13px] text-[#5B6370]">
                       {new Date(user.created_at).toLocaleDateString("pt-BR")}
                     </span>
-                  </button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); openEdit(user); }}
+                      className="w-[88px] gap-1.5 h-8 text-[12px]"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Editar
+                    </Button>
+                  </div>
                 );
               })}
             </div>
