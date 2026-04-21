@@ -294,8 +294,12 @@ function detectIntent(text: string, state?: string): { intent: Intent; confidenc
   }
 
   if (state === "waiting_consent") {
-    if (/^(sim|s|autoriza|autorizo)$/i.test(norm)) return { intent: "consentimento_sim", confidence: 0.98 };
-    if (/^(n[aã]o|n)$/i.test(norm)) return { intent: "consentimento_nao", confidence: 0.98 };
+    if (/^(1|sim|s|y|yes|autoriza|autorizo|concordo|aceito|pode|ok)$/i.test(norm)) {
+      return { intent: "consentimento_sim", confidence: 0.98 };
+    }
+    if (/^(2|n[aã]o|nao|n|no|neg|nego|nega|nego o consentimento|recusar)$/i.test(norm)) {
+      return { intent: "consentimento_nao", confidence: 0.98 };
+    }
   }
 
   if (/^(ajuda|help|menu|\?|comandos)$/i.test(norm)) return { intent: "ajuda", confidence: 0.98 };

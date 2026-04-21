@@ -137,12 +137,49 @@ function parseForExpectedField(text: string, fieldKey: string): Partial<DraftWis
   }
 
   if (fieldKey === "lgpdConsent") {
-    if (/^(sim|s|autorizo|concordo|aceito|ok|pode)$/i.test(trimmed)) {
+    if (/^(1|sim|s|y|yes|autorizo|autoriza|concordo|aceito|ok|pode)$/i.test(trimmed)) {
       return { lgpdConsent: true };
+    }
+    // "não" não é gravado aqui — tratado pelo handler consentimento_nao
+  }
+
+  if (fieldKey === "modelo") {
+    // Fallback: quando o extrator genérico não reconhece o modelo (taxonomia
+    // limitada), aceita texto livre no formato "Marca Modelo" ou só "Modelo".
+    // Ex: "Ford Fiesta Sedan 1.6", "Onix Plus", "HB20".
+    const words = trimmed.split(/\s+/).filter((w) => /^[A-Za-zÀ-ÿ0-9][\w\-.]{0,29}$/.test(w));
+    if (words.length === 1 && words[0].length >= 2) {
+      return { modelo: words[0] };
+    }
+    if (words.length === 2) {
+      return { marca: capitalize(words[0]), modelo: capitalize(words[1]) };
+    }
+    if (words.length >= 3 && words.length <= 6) {
+      return {
+        marca: capitalize(words[0]),
+        modelo: capitalize(words[1]),
+        versao: words.slice(2).join(" "),
+      };
     }
   }
 
   return {};
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+function fieldHint(fieldKey: string): string {
+  switch (fieldKey) {
+    case "modelo":         return 'Me manda marca e modelo. Ex: "Honda Civic", "Fiat Argo", "Renault Kwid".';
+    case "anoMin":         return 'Me manda o ano. Ex: "2022", "2020 a 2023", "a partir de 2021", "até 2022".';
+    case "precoMax":       return 'Me manda o orçamento. Ex: "120 mil", "R$ 130000", "até 100k".';
+    case "clienteNome":    return 'Me manda o nome do cliente, ou "Nome - telefone" se já tiver o telefone. Ex: "Renata Oliveira - (31) 98888-7777".';
+    case "clienteTelefone":return 'Me manda só o telefone do cliente. Ex: "(31) 98888-7777" ou "31988887777".';
+    case "lgpdConsent":    return 'Preciso saber se o cliente autorizou. Responda *SIM* (ou *1*) ou *NÃO* (ou *2*).';
+    default:               return "Pode reformular pra mim?";
+  }
 }
 
 function mergeDraft(current: DraftWish, fields: ExtractedFields): DraftWish {
@@ -410,12 +447,16 @@ export async function processTurn(input: TurnInput): Promise<void> {
     const newDraft: DraftWish = { ...draft, lgpdConsent: true };
     const missing = nextMissingField(newDraft);
     if (!missing) {
-      await touchSession(session.id, { state: "confirming", draftWish: asJson(newDraft) });
+      await touchSession(session.id, { state: "confirming", draftWish: asJson(newDraft), context: null });
       await sendText(session.phoneE164, buildConfirmationText(newDraft), {
         recipientId: user.id, recipientType: "vendedor", templateName: "confirmacao_desejo",
       });
     } else {
-      await touchSession(session.id, { state: "collecting_wish", draftWish: asJson(newDraft) });
+      await touchSession(session.id, {
+        state: "collecting_wish",
+        draftWish: asJson(newDraft),
+        context: { expectedField: missing.key },
+      });
       await sendText(session.phoneE164, missing.ask, {
         recipientId: user.id, recipientType: "vendedor", templateName: `ask_${missing.key}`,
       });
@@ -423,7 +464,7 @@ export async function processTurn(input: TurnInput): Promise<void> {
     return;
   }
   if (extraction.intent === "consentimento_nao") {
-    await touchSession(session.id, { state: "idle", draftWish: null });
+    await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
     await sendText(
       session.phoneE164,
       "Sem o consentimento do cliente não posso cadastrar. Quando tiver o ok dele, é só voltar aqui.",
@@ -447,8 +488,10 @@ export async function processTurn(input: TurnInput): Promise<void> {
 
     // Parser contextual: se o extrator genérico não preencheu o campo que
     // estávamos aguardando, tenta interpretar o texto cru no contexto do campo.
-    // Ex: user escreve "João Silva" quando pergunta era cliente → captura nome.
-    const expectedField = (session.context as Record<string, unknown> | null)?.expectedField as string | undefined;
+    const ctx = (session.context as Record<string, unknown> | null) ?? {};
+    const expectedField = ctx.expectedField as string | undefined;
+    const retryCount = (ctx.retryCount as number | undefined) ?? 0;
+
     if (missing && expectedField && missing.key === expectedField) {
       const contextualFields = parseForExpectedField(text, expectedField);
       if (Object.keys(contextualFields).length > 0) {
@@ -468,11 +511,28 @@ export async function processTurn(input: TurnInput): Promise<void> {
       });
       return;
     }
+
+    // Loop breaker: se estamos pedindo o MESMO campo 3+ vezes seguidas,
+    // muda a mensagem pra algo mais específico com escape.
+    const sameField = expectedField === missing.key;
+    const nextRetry = sameField ? retryCount + 1 : 0;
+
     await touchSession(session.id, {
       state: "collecting_wish",
       draftWish: asJson(newDraft),
-      context: { expectedField: missing.key },
+      context: { expectedField: missing.key, retryCount: nextRetry },
     });
+
+    if (nextRetry >= 2) {
+      const hint = fieldHint(missing.key);
+      await sendText(
+        session.phoneE164,
+        `Hmm, não consegui entender. ${hint}\n\nSe quiser interromper, envie *cancelar*.`,
+        { recipientId: user.id, recipientType: "vendedor", templateName: `retry_${missing.key}` }
+      );
+      return;
+    }
+
     await sendText(session.phoneE164, missing.ask, {
       recipientId: user.id, recipientType: "vendedor", templateName: `ask_${missing.key}`,
     });
