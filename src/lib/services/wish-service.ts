@@ -98,6 +98,45 @@ export async function findDuplicate(sellerId: string, brand: string, model: stri
   return data ? { id: data.id as string, createdAt: new Date(data.created_at as string) } : null;
 }
 
+/**
+ * Atualiza um desejo existente com os campos não-nulos do input. Usado quando
+ * o vendedor escolhe "ATUALIZAR" no fluxo de duplicata detectada.
+ */
+export async function updateWish(wishId: string, input: Partial<WishCreationInput>): Promise<void> {
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.clientName !== undefined)   update.client_name = input.clientName;
+  if (input.clientPhone !== undefined)  update.client_phone = input.clientPhone;
+  if (input.brand !== undefined)        update.brand = input.brand;
+  if (input.model !== undefined)        update.model = input.model;
+  if (input.version !== undefined)      update.version = input.version ?? null;
+  if (input.yearMin !== undefined)      update.year_min = input.yearMin ?? null;
+  if (input.yearMax !== undefined)      update.year_max = input.yearMax ?? null;
+  if (input.kmMax !== undefined)        update.km_max = input.kmMax ?? null;
+  if (input.priceMin !== undefined)     update.price_min = input.priceMin ?? null;
+  if (input.priceMax !== undefined)     update.price_max = input.priceMax ?? null;
+  if (input.colors !== undefined)       update.colors = input.colors ?? [];
+  if (input.transmission !== undefined) update.transmission = input.transmission;
+  if (input.fuel !== undefined)         update.fuel = input.fuel;
+  if (input.cityRef !== undefined)      update.city_ref = input.cityRef ?? null;
+  if (input.stateRef !== undefined)     update.state_ref = input.stateRef ?? null;
+  if (input.radiusKm !== undefined)     update.radius_km = input.radiusKm;
+  if (input.urgency !== undefined)      update.urgency = input.urgency;
+  if (input.notes !== undefined)        update.notes = input.notes ?? null;
+  if (input.lgpdConsent !== undefined)  update.lgpd_consent = input.lgpdConsent;
+
+  // Renova validade e status para "procurando" — faz sentido pois é uma "reativação"
+  if (input.validityDays !== undefined) {
+    update.validity_days = input.validityDays;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + input.validityDays);
+    update.expires_at = expiresAt.toISOString();
+  }
+  update.status = "procurando";
+
+  const { error } = await supabase.from("wishes").update(update).eq("id", wishId);
+  if (error) throw error;
+}
+
 export async function createWish(input: WishCreationInput): Promise<WishCreationResult> {
   const validityDays = input.validityDays ?? 30;
   const expiresAt = new Date();

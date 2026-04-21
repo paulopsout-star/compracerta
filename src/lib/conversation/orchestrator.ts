@@ -9,7 +9,7 @@
 import { supabase } from "@/lib/db";
 import { isEnabled } from "@/lib/feature-flags";
 import { sendText } from "@/lib/services/whatsapp";
-import { createWish, findDuplicate, hasReachedDailyLimit } from "@/lib/services/wish-service";
+import { createWish, findDuplicate, hasReachedDailyLimit, updateWish } from "@/lib/services/wish-service";
 import { extract, type ExtractedFields, type ExtractionResult } from "@/lib/conversation/extractor";
 import { extractWithClaude } from "@/lib/services/llm";
 import { touchSession, type ConversationSessionRow, type SessionState } from "@/lib/conversation/session-store";
@@ -139,8 +139,8 @@ async function handleVerStatus(user: AuthenticatedUser, session: ConversationSes
   );
 }
 
-async function persistWish(user: AuthenticatedUser, draft: DraftWish): Promise<string> {
-  const result = await createWish({
+function draftToWishInput(user: AuthenticatedUser, draft: DraftWish) {
+  return {
     sellerId: user.id,
     dealershipId: user.dealershipId,
     clientName: draft.clienteNome!,
@@ -154,14 +154,32 @@ async function persistWish(user: AuthenticatedUser, draft: DraftWish): Promise<s
     priceMin: draft.precoMin,
     priceMax: draft.precoMax,
     colors: draft.cor,
-    transmission: draft.cambio ?? "indiferente",
-    fuel: draft.combustivel ?? "indiferente",
+    transmission: draft.cambio ?? "indiferente" as const,
+    fuel: draft.combustivel ?? "indiferente" as const,
     cityRef: draft.cidadeRef,
-    urgency: draft.urgencia ?? "media",
+    urgency: draft.urgencia ?? "media" as const,
     lgpdConsent: draft.lgpdConsent === true,
     notes: draft.observacoes,
-  });
+  };
+}
+
+async function persistWish(user: AuthenticatedUser, draft: DraftWish): Promise<string> {
+  const result = await createWish(draftToWishInput(user, draft));
   return result.id;
+}
+
+async function sendCadastroConfirmado(session: ConversationSessionRow, user: AuthenticatedUser, draft: DraftWish, id: string): Promise<void> {
+  await sendText(
+    session.phoneE164,
+    renderTemplate("cadastro_confirmado", {
+      desejo_id_short: id.slice(-6),
+      marca: draft.marca ?? "",
+      modelo: draft.modelo ?? "",
+      ano_min: draft.anoMin ?? "",
+      ano_max: draft.anoMax ?? "",
+    }),
+    { recipientId: user.id, recipientType: "vendedor", templateName: "cadastro_confirmado" }
+  );
 }
 
 /**
@@ -193,7 +211,7 @@ export async function processTurn(input: TurnInput): Promise<void> {
     return;
   }
   if (extraction.intent === "cancelar") {
-    await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null });
+    await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
     await sendText(
       session.phoneE164,
       "Ok, cancelei o cadastro. Quando quiser, é só me mandar o que o cliente procura.",
@@ -204,6 +222,62 @@ export async function processTurn(input: TurnInput): Promise<void> {
 
   // --- Estado: confirming -----------------------------------------------
   if (state === "confirming") {
+    // Resolução de duplicata (contexto setado quando findDuplicate achou match).
+    // Interpreta "1/ATUALIZAR", "2/NOVO", "3/CANCELAR" SEM depender do extrator,
+    // que mapearia "1" para intent=confirmar (loop) ou "2" para intent=editar.
+    const pendingDupId = (session.context as Record<string, unknown> | null)?.pendingDuplicateId as string | undefined;
+    if (pendingDupId) {
+      const cmd = text.trim().toLowerCase();
+      if (/^(1|atualizar|update|atualiza)$/i.test(cmd)) {
+        try {
+          await updateWish(pendingDupId, draftToWishInput(user, draft));
+          await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
+          await sendText(
+            session.phoneE164,
+            `✅ Desejo atualizado com sucesso!\n\n*${draft.marca} ${draft.modelo}*\nID: #${pendingDupId.slice(-6)}\n\nVou recomeçar a busca com os novos dados.`,
+            { recipientId: user.id, recipientType: "vendedor", templateName: "duplicata_atualizado" }
+          );
+        } catch (err) {
+          console.error("[Orchestrator] updateWish failed:", err);
+          await sendText(session.phoneE164, "Tive um problema ao atualizar. Pode tentar de novo em alguns segundos?", {
+            recipientId: user.id, recipientType: "vendedor", templateName: "error_update",
+          });
+        }
+        return;
+      }
+      if (/^(2|novo|new|criar|outro)$/i.test(cmd)) {
+        try {
+          if (await hasReachedDailyLimit(user.id)) {
+            await sendText(session.phoneE164, renderTemplate("limite_diario", { limite: "20" }), {
+              recipientId: user.id, recipientType: "vendedor", templateName: "limite_diario",
+            });
+            return;
+          }
+          const id = await persistWish(user, draft);
+          await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
+          await sendCadastroConfirmado(session, user, draft, id);
+        } catch (err) {
+          console.error("[Orchestrator] force-create wish failed:", err);
+          await sendText(session.phoneE164, "Tive um problema ao cadastrar. Pode tentar de novo em alguns segundos?", {
+            recipientId: user.id, recipientType: "vendedor", templateName: "error_persist",
+          });
+        }
+        return;
+      }
+      if (/^(3|cancelar|cancela)$/i.test(cmd)) {
+        await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
+        await sendText(session.phoneE164, "Ok, cancelei. Quando quiser, é só me mandar um novo desejo.", {
+          recipientId: user.id, recipientType: "vendedor", templateName: "cancel_ack",
+        });
+        return;
+      }
+      // Resposta não reconhecida — reenvia a pergunta
+      await sendText(session.phoneE164, "Por favor, responda *1* (atualizar), *2* (criar novo) ou *3* (cancelar).", {
+        recipientId: user.id, recipientType: "vendedor", templateName: "duplicata_retry",
+      });
+      return;
+    }
+
     if (extraction.intent === "confirmar") {
       try {
         if (await hasReachedDailyLimit(user.id)) {
@@ -223,22 +297,16 @@ export async function processTurn(input: TurnInput): Promise<void> {
             }),
             { recipientId: user.id, recipientType: "vendedor", templateName: "duplicata_detectada" }
           );
-          // Mantém estado confirming — próximo turno decide 1/2/3
+          // Salva id da duplicata no contexto; próximo turno resolve
+          await touchSession(session.id, {
+            state: "confirming",
+            context: { pendingDuplicateId: dup.id },
+          });
           return;
         }
         const id = await persistWish(user, draft);
-        await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null });
-        await sendText(
-          session.phoneE164,
-          renderTemplate("cadastro_confirmado", {
-            desejo_id_short: id.slice(-6),
-            marca: draft.marca ?? "",
-            modelo: draft.modelo ?? "",
-            ano_min: draft.anoMin ?? "",
-            ano_max: draft.anoMax ?? "",
-          }),
-          { recipientId: user.id, recipientType: "vendedor", templateName: "cadastro_confirmado" }
-        );
+        await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
+        await sendCadastroConfirmado(session, user, draft, id);
       } catch (err) {
         console.error("[Orchestrator] persistWish failed:", err);
         await sendText(
