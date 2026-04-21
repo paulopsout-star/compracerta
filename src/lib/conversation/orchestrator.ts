@@ -82,25 +82,38 @@ function parseForExpectedField(text: string, fieldKey: string): Partial<DraftWis
   if (!trimmed) return {};
 
   if (fieldKey === "clienteNome") {
-    // "João Silva - 31988887777" → captura ambos
-    const dashSplit = trimmed.split(/\s+[-–—]\s+/);
-    if (dashSplit.length >= 2) {
-      const out: Partial<DraftWish> = {};
-      const namePart = dashSplit[0].trim();
-      if (/^[A-Za-zÀ-ÿ\s.'-]{3,60}$/.test(namePart) && namePart.split(/\s+/).length >= 1) {
-        out.clienteNome = namePart;
-      }
-      const phoneDigits = dashSplit.slice(1).join(" ").replace(/\D/g, "");
-      if (phoneDigits.length >= 10 && phoneDigits.length <= 13) {
-        const noDdi = phoneDigits.startsWith("55") ? phoneDigits.slice(2) : phoneDigits;
-        out.clienteTelefone = `+55${noDdi}`;
-      }
-      return out;
-    }
-    // Nome cru: 1+ palavras, só letras/acentos/espaços/pontos. Mínimo 3 caracteres.
+    const out: Partial<DraftWish> = {};
+
+    // 1) Nome cru (sem números): captura tudo como nome
     if (/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.'-]{2,59}$/.test(trimmed)) {
       return { clienteNome: trimmed };
     }
+
+    // 2) Tenta extrair telefone em qualquer formato embutido no texto
+    const phoneMatch = trimmed.match(
+      /(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)(?:9\s*)?\d{4,5}[-.\s]?\d{4}/
+    );
+    let namePart = trimmed;
+    if (phoneMatch) {
+      const phoneDigits = phoneMatch[0].replace(/\D/g, "");
+      if (phoneDigits.length >= 10 && phoneDigits.length <= 13) {
+        const noDdi = phoneDigits.startsWith("55") ? phoneDigits.slice(2) : phoneDigits;
+        out.clienteTelefone = `+55${noDdi}`;
+        // O que sobra (após remover o telefone + separadores) é candidato a nome
+        namePart = trimmed
+          .replace(phoneMatch[0], "")
+          .replace(/[-–—,:;]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+    }
+
+    // 3) Se sobrou algo parecido com nome, usa. Aceita acentos, espaços e pontos.
+    if (namePart && namePart !== trimmed && /^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.'-]{1,59}$/.test(namePart)) {
+      out.clienteNome = namePart;
+    }
+
+    if (Object.keys(out).length > 0) return out;
   }
 
   if (fieldKey === "clienteTelefone") {
