@@ -73,6 +73,78 @@ function nextMissingField(draft: DraftWish): { ask: string; key: string } | null
   return null;
 }
 
+/**
+ * Parser contextual: quando o bot acabou de perguntar um campo específico,
+ * interpreta a resposta livre do usuário nesse contexto. Evita loop quando
+ * o extrator genérico não pega (ex: "João Silva" solto não dispara
+ * extractNomeCliente, que espera formato "Nome - telefone").
+ */
+function parseForExpectedField(text: string, fieldKey: string): Partial<DraftWish> {
+  const trimmed = text.trim();
+  if (!trimmed) return {};
+
+  if (fieldKey === "clienteNome") {
+    // "João Silva - 31988887777" → captura ambos
+    const dashSplit = trimmed.split(/\s+[-–—]\s+/);
+    if (dashSplit.length >= 2) {
+      const out: Partial<DraftWish> = {};
+      const namePart = dashSplit[0].trim();
+      if (/^[A-Za-zÀ-ÿ\s.'-]{3,60}$/.test(namePart) && namePart.split(/\s+/).length >= 1) {
+        out.clienteNome = namePart;
+      }
+      const phoneDigits = dashSplit.slice(1).join(" ").replace(/\D/g, "");
+      if (phoneDigits.length >= 10 && phoneDigits.length <= 13) {
+        const noDdi = phoneDigits.startsWith("55") ? phoneDigits.slice(2) : phoneDigits;
+        out.clienteTelefone = `+55${noDdi}`;
+      }
+      return out;
+    }
+    // Nome cru: 1+ palavras, só letras/acentos/espaços/pontos. Mínimo 3 caracteres.
+    if (/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.'-]{2,59}$/.test(trimmed)) {
+      return { clienteNome: trimmed };
+    }
+  }
+
+  if (fieldKey === "clienteTelefone") {
+    const digits = trimmed.replace(/\D/g, "");
+    if (digits.length >= 10 && digits.length <= 13) {
+      const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
+      return { clienteTelefone: `+55${noDdi}` };
+    }
+  }
+
+  if (fieldKey === "precoMax") {
+    const m = trimmed.match(/^([\d.,]+)\s*(k|mil|m)?$/i);
+    if (m) {
+      const num = parseFloat(m[1].replace(/\./g, "").replace(",", "."));
+      if (!isNaN(num)) {
+        const suffix = m[2]?.toLowerCase();
+        const v =
+          suffix === "k" || suffix === "mil" ? num * 1000 :
+          suffix === "m" ? num * 1_000_000 :
+          num < 1000 ? num * 1000 : num;
+        return { precoMax: Math.round(v) };
+      }
+    }
+  }
+
+  if (fieldKey === "anoMin") {
+    const years = (trimmed.match(/20\d{2}/g) ?? [])
+      .map((y) => parseInt(y))
+      .filter((y) => y >= 2000 && y <= new Date().getFullYear() + 1);
+    if (years.length === 1) return { anoMin: years[0], anoMax: years[0] };
+    if (years.length >= 2) return { anoMin: Math.min(...years), anoMax: Math.max(...years) };
+  }
+
+  if (fieldKey === "lgpdConsent") {
+    if (/^(sim|s|autorizo|concordo|aceito|ok|pode)$/i.test(trimmed)) {
+      return { lgpdConsent: true };
+    }
+  }
+
+  return {};
+}
+
 function mergeDraft(current: DraftWish, fields: ExtractedFields): DraftWish {
   const next: DraftWish = { ...current };
   for (const [k, v] of Object.entries(fields) as Array<[keyof ExtractedFields, unknown]>) {
@@ -369,16 +441,38 @@ export async function processTurn(input: TurnInput): Promise<void> {
       );
       return;
     }
-    const newDraft = mergeDraft(draft, extraction.fields);
-    const missing = nextMissingField(newDraft);
+
+    let newDraft = mergeDraft(draft, extraction.fields);
+    let missing = nextMissingField(newDraft);
+
+    // Parser contextual: se o extrator genérico não preencheu o campo que
+    // estávamos aguardando, tenta interpretar o texto cru no contexto do campo.
+    // Ex: user escreve "João Silva" quando pergunta era cliente → captura nome.
+    const expectedField = (session.context as Record<string, unknown> | null)?.expectedField as string | undefined;
+    if (missing && expectedField && missing.key === expectedField) {
+      const contextualFields = parseForExpectedField(text, expectedField);
+      if (Object.keys(contextualFields).length > 0) {
+        newDraft = { ...newDraft, ...contextualFields };
+        missing = nextMissingField(newDraft);
+      }
+    }
+
     if (!missing) {
-      await touchSession(session.id, { state: "confirming", draftWish: asJson(newDraft) });
+      await touchSession(session.id, {
+        state: "confirming",
+        draftWish: asJson(newDraft),
+        context: null,
+      });
       await sendText(session.phoneE164, buildConfirmationText(newDraft), {
         recipientId: user.id, recipientType: "vendedor", templateName: "confirmacao_desejo",
       });
       return;
     }
-    await touchSession(session.id, { state: "collecting_wish", draftWish: asJson(newDraft) });
+    await touchSession(session.id, {
+      state: "collecting_wish",
+      draftWish: asJson(newDraft),
+      context: { expectedField: missing.key },
+    });
     await sendText(session.phoneE164, missing.ask, {
       recipientId: user.id, recipientType: "vendedor", templateName: `ask_${missing.key}`,
     });
