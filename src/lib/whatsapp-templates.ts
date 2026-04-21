@@ -75,7 +75,6 @@ Ano: {{ ano_min }} a {{ ano_max }}
 
 👤 *Cliente*
 {{ cliente_nome }} - {{ cliente_telefone_formatted }}
-Consentimento LGPD: ✅
 
 📍 *Região*
 {{ cidade_ref }} - {{ estado }}

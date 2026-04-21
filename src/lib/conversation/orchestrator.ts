@@ -43,11 +43,6 @@ const REQUIRED_FIELDS: Array<{
     ask: () => renderTemplate("pergunta_cliente"),
     validator: (d) => !!d.clienteNome && !!d.clienteTelefone,
   },
-  {
-    key: "lgpdConsent",
-    ask: () => renderTemplate("pergunta_consentimento_lgpd"),
-    validator: (d) => d.lgpdConsent === true,
-  },
 ];
 
 function asJson(draft: DraftWish): Record<string, unknown> {
@@ -136,13 +131,6 @@ function parseForExpectedField(text: string, fieldKey: string): Partial<DraftWis
     if (years.length >= 2) return { anoMin: Math.min(...years), anoMax: Math.max(...years) };
   }
 
-  if (fieldKey === "lgpdConsent") {
-    if (/^(1|sim|s|y|yes|autorizo|autoriza|concordo|aceito|ok|pode)$/i.test(trimmed)) {
-      return { lgpdConsent: true };
-    }
-    // "não" não é gravado aqui — tratado pelo handler consentimento_nao
-  }
-
   if (fieldKey === "modelo") {
     // Fallback: quando o extrator genérico não reconhece o modelo (taxonomia
     // limitada), aceita texto livre no formato "Marca Modelo" ou só "Modelo".
@@ -177,7 +165,6 @@ function fieldHint(fieldKey: string): string {
     case "precoMax":       return 'Me manda o orçamento. Ex: "120 mil", "R$ 130000", "até 100k".';
     case "clienteNome":    return 'Me manda o nome do cliente, ou "Nome - telefone" se já tiver o telefone. Ex: "Renata Oliveira - (31) 98888-7777".';
     case "clienteTelefone":return 'Me manda só o telefone do cliente. Ex: "(31) 98888-7777" ou "31988887777".';
-    case "lgpdConsent":    return 'Preciso saber se o cliente autorizou. Responda *SIM* (ou *1*) ou *NÃO* (ou *2*).';
     default:               return "Pode reformular pra mim?";
   }
 }
@@ -267,7 +254,7 @@ function draftToWishInput(user: AuthenticatedUser, draft: DraftWish) {
     fuel: draft.combustivel ?? "indiferente" as const,
     cityRef: draft.cidadeRef,
     urgency: draft.urgencia ?? "media" as const,
-    lgpdConsent: draft.lgpdConsent === true,
+    lgpdConsent: true, // etapa LGPD removida do fluxo conversacional
     notes: draft.observacoes,
   };
 }
@@ -299,12 +286,7 @@ export async function processTurn(input: TurnInput): Promise<void> {
   const draft = (session.draftWish as DraftWish) ?? {};
   const state = session.state as SessionState;
 
-  // Pseudo-estado para o extrator entender contexto de "sim/não" do consentimento
-  const extractorState = draft.clienteNome && draft.clienteTelefone && draft.lgpdConsent !== true
-    ? "waiting_consent"
-    : state;
-
-  const extraction = await runExtraction(text, extractorState, draft);
+  const extraction = await runExtraction(text, state, draft);
 
   // --- Intents universais ------------------------------------------------
   if (extraction.intent === "ajuda") {
@@ -443,35 +425,6 @@ export async function processTurn(input: TurnInput): Promise<void> {
   }
 
   // --- Estados coletando/idle -------------------------------------------
-  if (extraction.intent === "consentimento_sim") {
-    const newDraft: DraftWish = { ...draft, lgpdConsent: true };
-    const missing = nextMissingField(newDraft);
-    if (!missing) {
-      await touchSession(session.id, { state: "confirming", draftWish: asJson(newDraft), context: null });
-      await sendText(session.phoneE164, buildConfirmationText(newDraft), {
-        recipientId: user.id, recipientType: "vendedor", templateName: "confirmacao_desejo",
-      });
-    } else {
-      await touchSession(session.id, {
-        state: "collecting_wish",
-        draftWish: asJson(newDraft),
-        context: { expectedField: missing.key },
-      });
-      await sendText(session.phoneE164, missing.ask, {
-        recipientId: user.id, recipientType: "vendedor", templateName: `ask_${missing.key}`,
-      });
-    }
-    return;
-  }
-  if (extraction.intent === "consentimento_nao") {
-    await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
-    await sendText(
-      session.phoneE164,
-      "Sem o consentimento do cliente não posso cadastrar. Quando tiver o ok dele, é só voltar aqui.",
-      { recipientId: user.id, recipientType: "vendedor", templateName: "lgpd_denied" }
-    );
-    return;
-  }
 
   if (extraction.intent === "criar_desejo" || extraction.intent === "continuar_desejo" || state === "collecting_wish") {
     if (!(await isEnabled("wish.creation.enabled"))) {
