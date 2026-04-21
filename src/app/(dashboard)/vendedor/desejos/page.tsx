@@ -35,15 +35,35 @@ export default function MeusDesejosPage() {
   useEffect(load, []);
 
   async function updateStatus(id: string, status: string) {
-    await fetch(`/api/desejos/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
-    toast.success("Status atualizado");
-    load();
+    try {
+      const res = await fetch(`/api/desejos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Erro ${res.status}`);
+      }
+      toast.success("Status atualizado");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao atualizar status");
+    }
   }
   async function deleteWish(id: string) {
-    if (!confirm("Deseja excluir este desejo?")) return;
-    await fetch(`/api/desejos/${id}`, { method: "DELETE" });
-    toast.success("Desejo excluído");
-    load();
+    if (!confirm("Deseja excluir este desejo? Todos os matches e notificações relacionados serão removidos.")) return;
+    try {
+      const res = await fetch(`/api/desejos/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Erro ${res.status}`);
+      }
+      toast.success("Desejo excluído");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao excluir desejo");
+    }
   }
 
   return (

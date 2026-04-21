@@ -204,12 +204,33 @@ export async function DELETE(
     if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
     const { id } = await params;
-    // Remove matches first (FK)
-    await supabase.from("matches").delete().eq("wish_id", id);
+
+    // Cascata manual (Supabase sem ON DELETE CASCADE configurado):
+    //   notifications → match_id → matches → wish_id → wishes
+    // Sem esta ordem, o delete em matches viola FK de notifications.
+    const { data: matchRows, error: matchListErr } = await supabase
+      .from("matches")
+      .select("id")
+      .eq("wish_id", id);
+    if (matchListErr) throw matchListErr;
+    const matchIdList = (matchRows ?? []).map((m) => m.id as string);
+
+    if (matchIdList.length > 0) {
+      const { error: notifErr } = await supabase.from("notifications").delete().in("match_id", matchIdList);
+      if (notifErr) throw notifErr;
+    }
+
+    const { error: matchErr } = await supabase.from("matches").delete().eq("wish_id", id);
+    if (matchErr) throw matchErr;
+
+    // match_groups depende do schema novo; delete é no-op se tabela vazia
+    await supabase.from("match_groups").delete().eq("wish_id", id);
+
     await remove("wishes", id);
     return NextResponse.json({ message: "Desejo removido" });
   } catch (error) {
     console.error("[API] Error deleting wish:", error);
-    return NextResponse.json({ error: "Erro ao remover" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Erro ao remover";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
