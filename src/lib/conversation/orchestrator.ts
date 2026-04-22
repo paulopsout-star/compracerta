@@ -752,9 +752,29 @@ export async function processTurn(input: TurnInput): Promise<void> {
   }
 
   // --- Fallback ---------------------------------------------------------
+  // Mensagens curtas pós-cadastro (state idle, sem draft): silenciar.
+  // Evita o efeito "user diz 'ok' depois do cadastro e bot manda boas-vindas".
+  const norm = text.trim().toLowerCase();
+  const isShortAcknowledgement = /^(ok|okay|valeu|obrigad[oa]|obg|brigado|brigadao|blz|beleza|tmj|t[bm]+|👍|👌|✅|🙏|❤️?|💪)$/i.test(norm);
+  if (state === "idle" && isShortAcknowledgement) {
+    return;
+  }
+
+  // Saudação inicial: aí sim, boas-vindas formais
+  const isGreeting = /^(oi|ol[áa]|hey|hello|hi|bom dia|boa tarde|boa noite|tudo bem\??|e a[íi]\??)/i.test(norm);
+  if (isGreeting) {
+    await sendText(
+      session.phoneE164,
+      renderTemplate("boas_vindas", { vendedor_nome: user.name }),
+      { recipientId: user.id, recipientType: "vendedor", templateName: "boas_vindas" }
+    );
+    return;
+  }
+
+  // Outros casos: hint compacto, sem repetir o menu inteiro
   await sendText(
     session.phoneE164,
-    renderTemplate("boas_vindas", { vendedor_nome: user.name }),
-    { recipientId: user.id, recipientType: "vendedor", templateName: "boas_vindas" }
+    `🤔 Não entendi. Você pode:\n• Descrever o desejo (ex: _"Civic 2022 até 130 mil"_)\n• Enviar *status* para ver desejos ativos\n• Enviar *ajuda* para ver os comandos`,
+    { recipientId: user.id, recipientType: "vendedor", templateName: "fallback_hint" }
   );
 }
