@@ -18,6 +18,8 @@ export interface MatchSummary {
   offer: Offer;
   /** true quando não existia linha em matches para (wish, offer) antes deste run */
   isNew: boolean;
+  /** true quando a oferta é em uma cidade diferente da pedida no desejo */
+  outOfCity: boolean;
 }
 
 interface DbWishRow {
@@ -184,15 +186,24 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
       .select("id")
       .single();
 
+    const outOfCity = !!wish.cityRef
+      && offer.city.trim().toLowerCase() !== wish.cityRef.trim().toLowerCase();
+
     matches.push({
       matchId: (matchRow?.id as string) ?? "",
       score: result.score,
       offer: { ...offer, id: offerId },
       isNew: !existingOfferIds.has(offerId),
+      outOfCity,
     });
   }
 
-  matches.sort((a, b) => b.score - a.score);
+  // Ordena: in-city primeiro (por score desc), depois out-of-city (por score desc).
+  // Se o desejo não tem cidade definida, comportamento recai só em score.
+  matches.sort((a, b) => {
+    if (a.outOfCity !== b.outOfCity) return a.outOfCity ? 1 : -1;
+    return b.score - a.score;
+  });
 
   if (matches.length > 0) {
     await supabase

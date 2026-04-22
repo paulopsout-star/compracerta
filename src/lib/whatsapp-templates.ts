@@ -53,6 +53,12 @@ _Formato: João Silva - (31) 98888-7777_
 
 Esses dados serão usados apenas para buscar o veículo na rede, conforme nossa política de privacidade.`,
 
+  pergunta_cidade: `📍 Em qual *cidade* o cliente quer o veículo?
+
+_Exemplos: "Belo Horizonte", "São Paulo/SP", "Goiânia - GO"_
+
+A busca prioriza essa cidade. Se não encontrar, mostro opções em outras cidades.`,
+
   pergunta_consentimento_lgpd: `🔒 *Consentimento do cliente* (LGPD)
 
 O cliente autorizou que os dados dele (nome e telefone) sejam usados pelo Compra Certa para buscar o veículo na rede do Canal do Repasse?

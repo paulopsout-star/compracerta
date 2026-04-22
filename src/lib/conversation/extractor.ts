@@ -35,6 +35,7 @@ export interface ExtractedFields {
   clienteNome?: string;
   clienteTelefone?: string;
   cidadeRef?: string;
+  estadoRef?: string;
   raioKm?: number;
   urgencia?: "baixa" | "media" | "alta";
   observacoes?: string;

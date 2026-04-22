@@ -83,8 +83,11 @@ async function notifySellerForNewMatch(
 
   const { label: origemLabel, detalhes: origemDetalhes } = originLabel(top.offer);
   const alt = totalMatches - 1;
+  const outCityPrefix = top.outOfCity
+    ? `🌎 *Atenção:* não encontrei na cidade do desejo. Esta opção é em *${top.offer.city}/${top.offer.state}*.\n\n`
+    : "";
 
-  const body = renderTemplate("match_encontrado", {
+  const body = outCityPrefix + renderTemplate("match_encontrado", {
     marca: top.offer.brand,
     modelo: top.offer.model,
     versao: top.offer.version ?? "",
@@ -167,14 +170,19 @@ export async function GET(req: NextRequest) {
     for (const w of (wishes ?? []) as WishListRow[]) {
       try {
         const matches = await runMatchingForWish(w.id);
-        const newMatches = matches.filter((m) => m.isNew);
-        const topNew = newMatches.find((m) => m.score >= minScore);
+
+        // Pool prioriza in-city; out-of-city só conta se não houver in-city
+        const inCityAll = matches.filter((m) => !m.outOfCity);
+        const pool = inCityAll.length > 0 ? inCityAll : matches;
+
+        const newInPool = pool.filter((m) => m.isNew);
+        const topNew = newInPool.find((m) => m.score >= minScore);
 
         let notified = false;
         if (topNew && autoNotify) {
           const seller = sellerPhoneMap.get(w.seller_id);
           if (seller?.active && seller.phone) {
-            notified = await notifySellerForNewMatch(w.seller_id, seller.phone, w.id, topNew, matches.length);
+            notified = await notifySellerForNewMatch(w.seller_id, seller.phone, w.id, topNew, pool.length);
           }
         }
 
@@ -183,7 +191,7 @@ export async function GET(req: NextRequest) {
           brand: w.brand,
           model: w.model,
           matches: matches.length,
-          newMatches: newMatches.length,
+          newMatches: newInPool.length,
           notified,
         });
       } catch (err) {

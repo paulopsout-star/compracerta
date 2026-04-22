@@ -42,6 +42,11 @@ const REQUIRED_FIELDS: Array<{
   },
   { key: "precoMax", ask: () => renderTemplate("pergunta_preco") },
   {
+    key: "cidadeRef",
+    ask: () => renderTemplate("pergunta_cidade"),
+    validator: (d) => !!d.cidadeRef && d.cidadeRef.trim().length >= 2,
+  },
+  {
     key: "clienteNome",
     ask: () => renderTemplate("pergunta_cliente"),
     validator: (d) => !!d.clienteNome && !!d.clienteTelefone,
@@ -207,6 +212,22 @@ function parseForExpectedField(text: string, fieldKey: string, draft: DraftWish 
     return {};
   }
 
+  if (fieldKey === "cidadeRef") {
+    // "São Paulo / SP", "São Paulo - SP", "São Paulo, SP", "São Paulo SP"
+    const withUf = trimmed.match(/^(.+?)\s*[\/\-,]\s*([A-Za-z]{2})$/);
+    if (withUf) {
+      const city = withUf[1].trim();
+      const uf = withUf[2].toUpperCase();
+      if (city.length >= 2 && /^[A-Za-zÀ-ÿ\s.\-']+$/.test(city)) {
+        return { cidadeRef: city, estadoRef: uf };
+      }
+    }
+    // Cidade pura
+    if (/^[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.\-']{1,59}$/.test(trimmed)) {
+      return { cidadeRef: trimmed };
+    }
+  }
+
   if (fieldKey === "modelo") {
     // Fallback: quando o extrator genérico não reconhece o modelo (taxonomia
     // limitada), aceita texto livre no formato "Marca Modelo" ou só "Modelo".
@@ -241,6 +262,7 @@ function fieldHint(fieldKey: string): string {
     case "precoMax":       return 'Me manda o orçamento. Ex: "120 mil", "R$ 130000", "até 100k".';
     case "clienteNome":    return 'Me manda o nome do cliente, ou "Nome - telefone" se já tiver o telefone. Ex: "Renata Oliveira - (31) 98888-7777".';
     case "clienteTelefone":return 'Me manda só o telefone do cliente. Ex: "(31) 98888-7777" ou "31988887777".';
+    case "cidadeRef":      return 'Me diga a cidade. Ex: "Belo Horizonte", "São Paulo/SP", "Goiânia - GO".';
     default:               return "Pode reformular pra mim?";
   }
 }
@@ -329,6 +351,7 @@ function draftToWishInput(user: AuthenticatedUser, draft: DraftWish) {
     transmission: draft.cambio ?? "indiferente" as const,
     fuel: draft.combustivel ?? "indiferente" as const,
     cityRef: draft.cidadeRef,
+    stateRef: draft.estadoRef,
     urgency: draft.urgencia ?? "media" as const,
     lgpdConsent: true, // etapa LGPD removida do fluxo conversacional
     notes: draft.observacoes,
@@ -390,9 +413,15 @@ async function notifyMatch(
 ): Promise<void> {
   if (!(await isEnabled("match.auto_notify.enabled"))) return;
   if (matches.length === 0) return;
+
+  // Pool: matches in-city têm prioridade absoluta. Out-of-city só é
+  // considerado se NÃO houver nenhum in-city.
+  const inCity = matches.filter((m) => !m.outOfCity);
+  const pool = inCity.length > 0 ? inCity : matches;
+  const top = pool[0];
+
   const minScore = await getNumber("match.min_score_threshold", 70);
-  const top = matches[0];
-  if (top.score < minScore) return;
+  if (!top || top.score < minScore) return;
 
   // Idempotência: se já notificamos este match via WhatsApp, não re-envia
   if (top.matchId && await hasBeenNotified(top.matchId, "whatsapp")) {
@@ -400,9 +429,12 @@ async function notifyMatch(
   }
 
   const { label: origemLabel, detalhes: origemDetalhes } = originLabel(top.offer);
-  const alt = matches.length - 1;
+  const alt = pool.length - 1;
+  const outCityPrefix = top.outOfCity
+    ? `🌎 *Atenção:* não encontrei na cidade do desejo. Esta opção é em *${top.offer.city}/${top.offer.state}*.\n\n`
+    : "";
 
-  const body = renderTemplate("match_encontrado", {
+  const body = outCityPrefix + renderTemplate("match_encontrado", {
     marca: top.offer.brand,
     modelo: top.offer.model,
     versao: top.offer.version ?? "",
