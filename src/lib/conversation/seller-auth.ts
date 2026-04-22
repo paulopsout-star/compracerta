@@ -62,8 +62,10 @@ async function getDealerships(userId: string, dealershipId: string | null): Prom
 
 export async function identifySender(phoneE164: string): Promise<IdentifyResult> {
   const candidates = phoneCandidates(phoneE164);
+  const inboundDigits = phoneE164.replace(/\D/g, "");
+  const inboundNoDdi = inboundDigits.startsWith("55") ? inboundDigits.slice(2) : inboundDigits;
 
-  // Tenta cada formato; quebra no primeiro achado
+  // 1) Match direto (rápido, usa index em phone) via candidatos comuns
   let userRow: Record<string, unknown> | null = null;
   for (const p of candidates) {
     const { data } = await supabase
@@ -76,6 +78,24 @@ export async function identifySender(phoneE164: string): Promise<IdentifyResult>
       break;
     }
   }
+
+  // 2) Fallback robusto: compara por dígitos apenas (cobre qualquer formato)
+  if (!userRow) {
+    const { data: allActive } = await supabase
+      .from("users")
+      .select("id, name, role, active, phone, dealership_id, dealer_store_id")
+      .not("phone", "is", null);
+    for (const u of (allActive ?? []) as Array<Record<string, unknown>>) {
+      const storedDigits = ((u.phone as string | null) ?? "").replace(/\D/g, "");
+      if (!storedDigits) continue;
+      const storedNoDdi = storedDigits.startsWith("55") ? storedDigits.slice(2) : storedDigits;
+      if (storedDigits === inboundDigits || storedNoDdi === inboundNoDdi) {
+        userRow = u;
+        break;
+      }
+    }
+  }
+
   if (!userRow) return { kind: "unknown" };
 
   const user: AuthenticatedUser = {

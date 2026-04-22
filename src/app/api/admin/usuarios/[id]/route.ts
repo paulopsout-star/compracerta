@@ -6,6 +6,15 @@ import { supabase } from "@/lib/db";
 
 const ROLES = ["vendedor", "gestor", "lojista", "admin"] as const;
 
+function normalizePhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
+  if (noDdi.length !== 10 && noDdi.length !== 11) return null;
+  return `+55${noDdi}`;
+}
+
 const updateSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   email: z.string().email().toLowerCase().optional(),
@@ -59,7 +68,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
     const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (d.name !== undefined)          update.name = d.name;
     if (d.email !== undefined)         update.email = d.email;
-    if (d.phone !== undefined)         update.phone = d.phone || null;
+    if (d.phone !== undefined)         update.phone = normalizePhone(d.phone);
     if (d.role !== undefined)          update.role = d.role;
     if (d.dealershipId !== undefined)  update.dealership_id = d.dealershipId || null;
     if (d.dealerStoreId !== undefined) update.dealer_store_id = d.dealerStoreId || null;

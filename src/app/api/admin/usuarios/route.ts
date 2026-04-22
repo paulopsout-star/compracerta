@@ -6,6 +6,20 @@ import { supabase } from "@/lib/db";
 
 const ROLES = ["vendedor", "gestor", "lojista", "admin"] as const;
 
+/**
+ * Normaliza telefone para E.164 brasileiro ("+5547997531517"). Aceita qualquer
+ * formato de entrada (com/sem DDI, parênteses, traço, espaço). Retorna null se
+ * não for um número válido.
+ */
+function normalizePhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
+  if (noDdi.length !== 10 && noDdi.length !== 11) return null; // fixo 10 ou celular 11
+  return `+55${noDdi}`;
+}
+
 const createSchema = z.object({
   name: z.string().min(2, "Nome muito curto").max(120),
   email: z.string().email("E-mail inválido").toLowerCase(),
@@ -73,7 +87,7 @@ export async function POST(request: NextRequest) {
       .insert({
         name: d.name,
         email: d.email,
-        phone: d.phone || null,
+        phone: normalizePhone(d.phone),
         role: d.role,
         dealership_id: d.dealershipId || null,
         dealer_store_id: d.dealerStoreId || null,
