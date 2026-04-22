@@ -11,14 +11,22 @@ function normalizePhone(raw: string | null | undefined): string | null {
   const digits = raw.replace(/\D/g, "");
   if (!digits) return null;
   const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
-  if (noDdi.length !== 10 && noDdi.length !== 11) return null;
+  if (noDdi.length !== 11) return null; // só celular: DDD + 9 + 8 digitos
   return `+55${noDdi}`;
+}
+
+function phoneIsValidIfPresent(raw: string | null | undefined): boolean {
+  if (!raw) return true;
+  return normalizePhone(raw) !== null;
 }
 
 const updateSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   email: z.string().email().toLowerCase().optional(),
-  phone: z.string().nullable().optional(),
+  phone: z.string().nullable().optional().refine(
+    phoneIsValidIfPresent,
+    "Telefone deve ter 11 dígitos: DDD + 9 + número"
+  ),
   role: z.enum(ROLES).optional(),
   dealershipId: z.string().nullable().optional(),
   dealerStoreId: z.string().nullable().optional(),
@@ -62,6 +70,26 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
         .maybeSingle();
       if (existing) {
         return NextResponse.json({ error: "E-mail já usado por outro usuário" }, { status: 409 });
+      }
+    }
+
+    // Vendedor exige telefone no estado FINAL pós-update — carrega user atual
+    // para resolver o caso "user já vendedor, está atualizando só name".
+    if (d.role !== undefined || d.phone !== undefined) {
+      const { data: current } = await supabase
+        .from("users")
+        .select("role, phone")
+        .eq("id", id)
+        .single();
+      const finalRole = d.role ?? (current?.role as string | undefined);
+      const finalPhoneNormalized = d.phone !== undefined
+        ? normalizePhone(d.phone)
+        : normalizePhone(current?.phone as string | null | undefined);
+      if (finalRole === "vendedor" && !finalPhoneNormalized) {
+        return NextResponse.json(
+          { error: "Vendedor precisa de telefone com 11 dígitos (acesso via WhatsApp)" },
+          { status: 400 }
+        );
       }
     }
 

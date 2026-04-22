@@ -7,29 +7,39 @@ import { supabase } from "@/lib/db";
 const ROLES = ["vendedor", "gestor", "lojista", "admin"] as const;
 
 /**
- * Normaliza telefone para E.164 brasileiro ("+5547997531517"). Aceita qualquer
- * formato de entrada (com/sem DDI, parênteses, traço, espaço). Retorna null se
- * não for um número válido.
+ * Normaliza telefone para E.164 brasileiro celular ("+55479XXXXXXXX").
+ * Exige 11 dígitos (DDD + 9 + 8 dígitos). Retorna null se ausente ou inválido.
  */
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const digits = raw.replace(/\D/g, "");
   if (!digits) return null;
   const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
-  if (noDdi.length !== 10 && noDdi.length !== 11) return null; // fixo 10 ou celular 11
+  if (noDdi.length !== 11) return null;
   return `+55${noDdi}`;
+}
+
+function phoneIsValidIfPresent(raw: string | null | undefined): boolean {
+  if (!raw) return true;
+  return normalizePhone(raw) !== null;
 }
 
 const createSchema = z.object({
   name: z.string().min(2, "Nome muito curto").max(120),
   email: z.string().email("E-mail inválido").toLowerCase(),
-  phone: z.string().optional().nullable(),
+  phone: z.string().nullable().optional().refine(
+    phoneIsValidIfPresent,
+    "Telefone deve ter 11 dígitos: DDD + 9 + número"
+  ),
   role: z.enum(ROLES),
   dealershipId: z.string().nullable().optional(),
   dealerStoreId: z.string().nullable().optional(),
   active: z.boolean().default(true),
   password: z.string().min(6, "Senha mínima de 6 caracteres"),
-});
+}).refine(
+  (d) => d.role !== "vendedor" || (d.phone && d.phone.replace(/\D/g, "").length >= 10),
+  { message: "Vendedor precisa de telefone (acesso via WhatsApp)", path: ["phone"] }
+);
 
 async function requireAdmin() {
   const session = await auth();

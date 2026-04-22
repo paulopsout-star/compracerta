@@ -55,20 +55,21 @@ const EMPTY_FORM: FormState = {
 };
 
 /**
- * Aplica máscara BR no input de telefone enquanto o usuário digita.
- * Aceita entrada em qualquer formato e devolve "(XX) XXXXX-XXXX" (celular)
- * ou "(XX) XXXX-XXXX" (fixo). Tolera prefixo +55 e o remove.
+ * Aplica máscara BR de celular no input. Sempre formato "(XX) XXXXX-XXXX"
+ * (11 dígitos). Tolera prefixo +55 e o remove. Limita a 11 dígitos.
  */
 function formatPhoneInput(value: string): string {
   let digits = value.replace(/\D/g, "");
-  // Remove DDI 55 quando claramente está presente (mais de 11 dígitos)
   if (digits.length > 11 && digits.startsWith("55")) digits = digits.slice(2);
   digits = digits.slice(0, 11);
   if (digits.length === 0) return "";
   if (digits.length <= 2) return `(${digits}`;
-  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function phoneDigitsCount(formatted: string): number {
+  return formatted.replace(/\D/g, "").length;
 }
 
 export default function AdminUsuariosPage() {
@@ -131,6 +132,14 @@ export default function AdminUsuariosPage() {
     if (!form.email.trim()) return toast.error("E-mail obrigatório");
     if (creating && (!form.password || form.password.length < 6)) {
       return toast.error("Senha mínima de 6 caracteres");
+    }
+    // Telefone: obrigatório para vendedor (acesso WhatsApp); 11 dígitos sempre que preenchido
+    const phoneDigits = phoneDigitsCount(form.phone);
+    if (form.role === "vendedor" && phoneDigits === 0) {
+      return toast.error("Telefone é obrigatório para vendedor (usado para acesso via WhatsApp).");
+    }
+    if (phoneDigits > 0 && phoneDigits !== 11) {
+      return toast.error("Telefone deve ter 11 dígitos: DDD + 9 + número (ex: (47) 99753-1517).");
     }
 
     setSaving(true);
@@ -300,7 +309,10 @@ export default function AdminUsuariosPage() {
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="phone">Telefone (WhatsApp)</Label>
+              <Label htmlFor="phone">
+                Telefone (WhatsApp)
+                {form.role === "vendedor" ? <span className="text-[#E5484D] ml-1">*</span> : null}
+              </Label>
               <Input
                 id="phone"
                 inputMode="tel"
@@ -308,9 +320,13 @@ export default function AdminUsuariosPage() {
                 maxLength={15}
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: formatPhoneInput(e.target.value) })}
-                placeholder="(31) 98888-7777"
+                placeholder="(47) 99753-1517"
               />
-              <p className="text-[11px] text-[#9AA0AB]">Cole ou digite — o sistema formata automaticamente.</p>
+              <p className="text-[11px] text-[#9AA0AB]">
+                {form.role === "vendedor"
+                  ? "Obrigatório — celular com 11 dígitos (DDD + 9 + número). Usado para acesso via WhatsApp."
+                  : "Opcional. Se preenchido, deve ter 11 dígitos (celular com DDD + 9)."}
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
