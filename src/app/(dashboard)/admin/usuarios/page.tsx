@@ -54,6 +54,23 @@ const EMPTY_FORM: FormState = {
   dealershipId: "", dealerStoreId: "", active: true, password: "",
 };
 
+/**
+ * Aplica máscara BR no input de telefone enquanto o usuário digita.
+ * Aceita entrada em qualquer formato e devolve "(XX) XXXXX-XXXX" (celular)
+ * ou "(XX) XXXX-XXXX" (fixo). Tolera prefixo +55 e o remove.
+ */
+function formatPhoneInput(value: string): string {
+  let digits = value.replace(/\D/g, "");
+  // Remove DDI 55 quando claramente está presente (mais de 11 dígitos)
+  if (digits.length > 11 && digits.startsWith("55")) digits = digits.slice(2);
+  digits = digits.slice(0, 11);
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 export default function AdminUsuariosPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [dealerships, setDealerships] = useState<DealershipOption[]>([]);
@@ -92,7 +109,7 @@ export default function AdminUsuariosPage() {
     setForm({
       name: user.name,
       email: user.email,
-      phone: user.phone ?? "",
+      phone: formatPhoneInput(user.phone ?? ""),
       role: user.role,
       dealershipId: user.dealership_id ?? "",
       dealerStoreId: user.dealer_store_id ?? "",
@@ -284,8 +301,16 @@ export default function AdminUsuariosPage() {
 
             <div className="grid gap-1.5">
               <Label htmlFor="phone">Telefone (WhatsApp)</Label>
-              <Input id="phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+5531988887777" />
-              <p className="text-[11px] text-[#9AA0AB]">Aceita +5531988887777, (31) 98888-7777 ou 31988887777.</p>
+              <Input
+                id="phone"
+                inputMode="tel"
+                autoComplete="tel"
+                maxLength={15}
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: formatPhoneInput(e.target.value) })}
+                placeholder="(31) 98888-7777"
+              />
+              <p className="text-[11px] text-[#9AA0AB]">Cole ou digite — o sistema formata automaticamente.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
