@@ -294,6 +294,18 @@ async function sendCadastroConfirmado(session: ConversationSessionRow, user: Aut
   );
 }
 
+function panelBaseUrl(): string {
+  const raw = process.env.NEXTAUTH_URL?.trim() || process.env.VERCEL_URL?.trim();
+  if (!raw) return "https://compracerta-seven.vercel.app";
+  return raw.startsWith("http") ? raw.replace(/\/$/, "") : `https://${raw}`;
+}
+
+function buildAlternativasLinha(alt: number, wishId: string): string {
+  const link = `${panelBaseUrl()}/vendedor/matches?wishId=${encodeURIComponent(wishId)}`;
+  const plural = alt > 1 ? "s" : "";
+  return `📊 Há mais *${alt} alternativa${plural}* para esse desejo.\nAcesse o painel do Compra Certa para avaliar:\n🔗 ${link}`;
+}
+
 function originLabel(offer: Offer): { label: string; detalhes: string } {
   switch (offer.source) {
     case "avaliador":
@@ -313,6 +325,7 @@ function originLabel(offer: Offer): { label: string; detalhes: string } {
 async function notifyMatch(
   session: ConversationSessionRow,
   user: AuthenticatedUser,
+  wishId: string,
   matches: MatchSummary[]
 ): Promise<void> {
   if (!(await isEnabled("match.auto_notify.enabled"))) return;
@@ -344,7 +357,7 @@ async function notifyMatch(
     status_veiculo: top.offer.externalStatus ?? "Ativo",
     contato_nome: top.offer.externalSellerName ?? "—",
     contato_telefone: "—",
-    alternativas_linha: alt > 0 ? `_Temos mais ${alt} alternativa${alt > 1 ? "s" : ""} — envie *próximo* para ver._` : "",
+    alternativas_linha: alt > 0 ? buildAlternativasLinha(alt, wishId) : "",
     alt_count: alt,
   });
 
@@ -375,7 +388,7 @@ async function runMatchAndNotify(
   try {
     const matches = await runMatchingForWish(wishId);
     if (matches.length > 0) {
-      await notifyMatch(session, user, matches);
+      await notifyMatch(session, user, wishId, matches);
     } else {
       await sendSemMatch(session, user, draft);
     }

@@ -58,9 +58,22 @@ function originLabel(offer: Offer): { label: string; detalhes: string } {
  * Envia notification para o vendedor e registra em notifications.
  * Retorna false se já havia registro prévio (skip idempotente).
  */
+function panelBaseUrl(): string {
+  const raw = process.env.NEXTAUTH_URL?.trim() || process.env.VERCEL_URL?.trim();
+  if (!raw) return "https://compracerta-seven.vercel.app";
+  return raw.startsWith("http") ? raw.replace(/\/$/, "") : `https://${raw}`;
+}
+
+function buildAlternativasLinha(alt: number, wishId: string): string {
+  const link = `${panelBaseUrl()}/vendedor/matches?wishId=${encodeURIComponent(wishId)}`;
+  const plural = alt > 1 ? "s" : "";
+  return `📊 Há mais *${alt} alternativa${plural}* para esse desejo.\nAcesse o painel do Compra Certa para avaliar:\n🔗 ${link}`;
+}
+
 async function notifySellerForNewMatch(
   sellerId: string,
   sellerPhone: string,
+  wishId: string,
   top: MatchSummary,
   totalMatches: number
 ): Promise<boolean> {
@@ -86,7 +99,7 @@ async function notifySellerForNewMatch(
     status_veiculo: top.offer.externalStatus ?? "Ativo",
     contato_nome: top.offer.externalSellerName ?? "—",
     contato_telefone: "—",
-    alternativas_linha: alt > 0 ? `_Temos mais ${alt} alternativa${alt > 1 ? "s" : ""} — envie *próximo* para ver._` : "",
+    alternativas_linha: alt > 0 ? buildAlternativasLinha(alt, wishId) : "",
     alt_count: alt,
   });
 
@@ -161,7 +174,7 @@ export async function GET(req: NextRequest) {
         if (topNew && autoNotify) {
           const seller = sellerPhoneMap.get(w.seller_id);
           if (seller?.active && seller.phone) {
-            notified = await notifySellerForNewMatch(w.seller_id, seller.phone, topNew, matches.length);
+            notified = await notifySellerForNewMatch(w.seller_id, seller.phone, w.id, topNew, matches.length);
           }
         }
 

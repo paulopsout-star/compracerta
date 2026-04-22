@@ -115,14 +115,9 @@ Status: {{ status_veiculo }}
 
 👤 *Contato*
 {{ contato_nome }}
-{{ contato_telefone }}
+{{ contato_telefone }}{{#if alternativas_linha}}
 
-{{#if alternativas_linha}}{{ alternativas_linha }}
-
-{{/if}}_Responda:_
-*1* - Ver mais detalhes
-*2* - Próxima opção ({{ alt_count }} alternativas)
-*3* - Encaminhar resumo para o cliente`,
+{{ alternativas_linha }}{{/if}}`,
 
   notificacao_gestor: `🔔 *Compra Certa: oportunidade na sua unidade*
 
