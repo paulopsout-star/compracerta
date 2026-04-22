@@ -7,9 +7,12 @@
  * - Múltiplos vínculos: hoje o schema tem 1 dealershipId por usuário, então
  *   `dealershipChoices` retorna 0 ou 1. Já deixamos a API pronta para quando
  *   surgirem vínculos N-para-N.
+ * - Validação dupla: se não achar no DB, consulta Avaliador Digital.
+ *   Se Avaliador autoriza, auto-cria usuário vendedor (acesso liberado).
  */
 
 import { supabase } from "@/lib/db";
+import { isPhoneAuthorizedInAvaliador } from "@/lib/services/avaliador-api";
 
 export interface AuthenticatedUser {
   id: string;
@@ -60,7 +63,55 @@ async function getDealerships(userId: string, dealershipId: string | null): Prom
   return data ? [{ id: data.id, name: data.name }] : [];
 }
 
-export async function identifySender(phoneE164: string): Promise<IdentifyResult> {
+/**
+ * Auto-cria um usuário vendedor com phone normalizado quando o Avaliador
+ * Digital autorizou o acesso. Email/password placeholder; perfil pode ser
+ * completado depois pelo admin via /admin/usuarios.
+ */
+async function autoCreateVendedorFromAvaliador(
+  phoneE164: string,
+  displayName?: string
+): Promise<Record<string, unknown> | null> {
+  const digits = phoneE164.replace(/\D/g, "");
+  const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
+  const placeholderEmail = `whatsapp+${noDdi}@compracerta.local`;
+  const name = (displayName?.trim() || `Vendedor ${noDdi.slice(0, 2)}-${noDdi.slice(-4)}`).slice(0, 120);
+
+  // Idempotência: se o email placeholder já existe (tentativa anterior), reaproveita
+  const { data: existing } = await supabase
+    .from("users")
+    .select("id, name, role, active, phone, dealership_id, dealer_store_id")
+    .eq("email", placeholderEmail)
+    .maybeSingle();
+  if (existing) {
+    // Atualiza phone caso esteja em formato diferente (raro)
+    if (existing.phone !== phoneE164) {
+      await supabase.from("users").update({ phone: phoneE164 }).eq("id", existing.id as string);
+    }
+    return existing;
+  }
+
+  const { data: created, error } = await supabase
+    .from("users")
+    .insert({
+      name,
+      email: placeholderEmail,
+      phone: phoneE164,
+      role: "vendedor",
+      active: true,
+    })
+    .select("id, name, role, active, phone, dealership_id, dealer_store_id")
+    .single();
+
+  if (error) {
+    console.error("[seller-auth] auto-create falhou:", error.message);
+    return null;
+  }
+  console.log("[seller-auth] vendedor auto-criado via Avaliador:", { id: created.id, phone: phoneE164 });
+  return created;
+}
+
+export async function identifySender(phoneE164: string, opts?: { displayName?: string }): Promise<IdentifyResult> {
   const candidates = phoneCandidates(phoneE164);
   const inboundDigits = phoneE164.replace(/\D/g, "");
   const inboundNoDdi = inboundDigits.startsWith("55") ? inboundDigits.slice(2) : inboundDigits;
@@ -93,6 +144,14 @@ export async function identifySender(phoneE164: string): Promise<IdentifyResult>
         userRow = u;
         break;
       }
+    }
+  }
+
+  // 3) Não achou no DB → consulta Avaliador Digital. Se autorizar, auto-cria.
+  if (!userRow) {
+    const authorized = await isPhoneAuthorizedInAvaliador(phoneE164);
+    if (authorized) {
+      userRow = await autoCreateVendedorFromAvaliador(phoneE164, opts?.displayName);
     }
   }
 

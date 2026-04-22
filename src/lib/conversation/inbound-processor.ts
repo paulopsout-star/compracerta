@@ -116,7 +116,7 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
     }
 
     console.log("[Inbound] identifying sender", { phoneE164 });
-    const ident = await identifySender(phoneE164);
+    const ident = await identifySender(phoneE164, { displayName: env.senderName });
     console.log("[Inbound] ident result", { kind: ident.kind, userId: ident.kind !== "unknown" ? ident.user.id : null });
 
     // Desconhecido — resposta padrão, NÃO persiste (LGPD)

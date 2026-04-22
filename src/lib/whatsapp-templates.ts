@@ -19,10 +19,9 @@ Exemplo: _"Quero um Civic 2022 automático, até 120 mil"_
 
 Digite *ajuda* a qualquer momento para ver os comandos.`,
 
-  numero_nao_cadastrado: `Olá! Esse número não está cadastrado como vendedor no *Compra Certa*.
+  numero_nao_cadastrado: `Olá! Esse número não está cadastrado no *Compra Certa* nem na base do *Avaliador Digital*.
 
-Se você é vendedor de uma concessionária parceira e quer acesso, peça ao seu gestor para cadastrar seu número na plataforma:
-🔗 compracerta.com.br/solicitar-acesso
+Para solicitar acesso, entre em contato com o *gestor da sua concessionária*.
 
 Seus dados *não foram armazenados* nesta conversa.`,
 
