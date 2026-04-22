@@ -77,7 +77,7 @@ function nextMissingField(draft: DraftWish): { ask: string; key: string } | null
  * o extrator genérico não pega (ex: "João Silva" solto não dispara
  * extractNomeCliente, que espera formato "Nome - telefone").
  */
-function parseForExpectedField(text: string, fieldKey: string): Partial<DraftWish> {
+function parseForExpectedField(text: string, fieldKey: string, draft: DraftWish = {}): Partial<DraftWish> {
   const trimmed = text.trim();
   if (!trimmed) return {};
 
@@ -140,11 +140,71 @@ function parseForExpectedField(text: string, fieldKey: string): Partial<DraftWis
   }
 
   if (fieldKey === "anoMin") {
+    const norm = trimmed.toLowerCase();
+
+    // "a partir de X" / "depois de X" / "de X em diante"
+    const apartir = norm.match(/(?:a partir de|depois de|de)\s+(20\d{2})\s*(?:em diante|pra cima|para cima)?$/);
+    if (apartir) {
+      const y = parseInt(apartir[1]);
+      return { anoMin: y, anoMax: new Date().getFullYear() + 1 };
+    }
+    // "até X"
+    const ate = norm.match(/^at[eé]\s+(20\d{2})$/);
+    if (ate) return { anoMin: 2000, anoMax: parseInt(ate[1]) };
+
     const years = (trimmed.match(/20\d{2}/g) ?? [])
       .map((y) => parseInt(y))
       .filter((y) => y >= 2000 && y <= new Date().getFullYear() + 1);
-    if (years.length === 1) return { anoMin: years[0], anoMax: years[0] };
+    // Apenas 1 ano: deixa anoMax indefinido pra orquestrador pedir clarificação
+    if (years.length === 1) return { anoMin: years[0] };
     if (years.length >= 2) return { anoMin: Math.min(...years), anoMax: Math.max(...years) };
+  }
+
+  // Estado especial: já temos anoMin e estamos perguntando se é "só esse ano"
+  // ou um intervalo. Aceita "isso/sim/só" pra confirmar, ou expressão de range.
+  if (fieldKey === "anoMax_clarification") {
+    const norm = trimmed.toLowerCase();
+    const baseYearMatch = norm.match(/20\d{2}/);
+    const allYears = (norm.match(/20\d{2}/g) ?? [])
+      .map((y) => parseInt(y))
+      .filter((y) => y >= 2000 && y <= new Date().getFullYear() + 1);
+
+    // Faixa explicita "X a Y" / "X-Y" / "X até Y"
+    const range = norm.match(/(20\d{2})\s*(?:[-–—a]|at[eé])\s*(20\d{2})/);
+    if (range) {
+      const a = parseInt(range[1]), b = parseInt(range[2]);
+      return { anoMin: Math.min(a, b), anoMax: Math.max(a, b) };
+    }
+
+    // "a partir de X" / "depois de X"
+    const apartir = norm.match(/(?:a partir de|depois de)\s+(20\d{2})/);
+    if (apartir) {
+      return { anoMin: parseInt(apartir[1]), anoMax: new Date().getFullYear() + 1 };
+    }
+
+    // "até X"
+    const ate = norm.match(/at[eé]\s+(20\d{2})/);
+    if (ate && allYears.length === 1) {
+      // user só falou "até 2018" sem repetir o anoBase — assumimos do contexto
+      return { anoMax: parseInt(ate[1]) };
+    }
+
+    // Confirmação: "isso", "sim", "só", "esse mesmo", "apenas" → anoMax = anoMin
+    if (/^(isso|sim|s|s[oó]|s[oó] esse|esse mesmo|apenas|confirmo|exato|ok|pode)/i.test(norm)) {
+      if (draft.anoMin) return { anoMax: draft.anoMin };
+    }
+
+    // user só repetiu o ano base
+    if (allYears.length === 1 && draft.anoMin === allYears[0]) {
+      return { anoMax: allYears[0] };
+    }
+    // user falou outro ano único → assume como limite superior do range
+    if (allYears.length === 1 && draft.anoMin && allYears[0] !== draft.anoMin) {
+      const a = draft.anoMin, b = allYears[0];
+      return { anoMin: Math.min(a, b), anoMax: Math.max(a, b) };
+    }
+
+    return {};
   }
 
   if (fieldKey === "modelo") {
@@ -588,12 +648,36 @@ export async function processTurn(input: TurnInput): Promise<void> {
     const expectedField = ctx.expectedField as string | undefined;
     const retryCount = (ctx.retryCount as number | undefined) ?? 0;
 
-    if (missing && expectedField && missing.key === expectedField) {
-      const contextualFields = parseForExpectedField(text, expectedField);
+    // Estado especial: aguardando clarificação de ano único
+    if (expectedField === "anoMax_clarification") {
+      const cf = parseForExpectedField(text, "anoMax_clarification", newDraft);
+      if (Object.keys(cf).length > 0) {
+        newDraft = { ...newDraft, ...cf };
+        missing = nextMissingField(newDraft);
+      }
+    } else if (missing && expectedField && missing.key === expectedField) {
+      const contextualFields = parseForExpectedField(text, expectedField, newDraft);
       if (Object.keys(contextualFields).length > 0) {
         newDraft = { ...newDraft, ...contextualFields };
         missing = nextMissingField(newDraft);
       }
+    }
+
+    // Ambiguidade de ano único: vendedor citou só "2015" — pede clarificação
+    // antes de seguir pra próxima pergunta. Evita restringir a busca demais.
+    if (newDraft.anoMin && !newDraft.anoMax) {
+      const ano = newDraft.anoMin;
+      await touchSession(session.id, {
+        state: "collecting_wish",
+        draftWish: asJson(newDraft),
+        context: { expectedField: "anoMax_clarification" },
+      });
+      await sendText(
+        session.phoneE164,
+        `📅 Você citou *${ano}*. Quer apenas esse ano específico ou um intervalo de anos?\n\n_Exemplos:_\n• "só ${ano}"\n• "${ano} a ${ano + 3}"\n• "até ${ano}"\n• "a partir de ${ano}"`,
+        { recipientId: user.id, recipientType: "vendedor", templateName: "ano_clarificacao" }
+      );
+      return;
     }
 
     if (!missing) {

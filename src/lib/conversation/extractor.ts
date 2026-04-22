@@ -199,11 +199,14 @@ function extractAno(text: string): { anoMin?: number; anoMax?: number } {
     return { anoMax: parseInt(untilYear[1]) };
   }
 
-  // Ano único "em 2022", "2022 " (evitar falsos positivos com preços)
+  // Ano único "em 2022", "2022 " (evitar falsos positivos com preços).
+  // IMPORTANTE: deixamos anoMax undefined para o orquestrador pedir
+  // clarificação ("só esse ano ou um intervalo?"). Vendedores costumam
+  // dizer "Fit 2015" sem querer dizer estritamente o ano 2015.
   const singles = Array.from(norm.matchAll(/\b(20\d{2})\b/g))
     .map((m) => parseInt(m[1]))
     .filter((y) => y >= 2000 && y <= currentYear + 1);
-  if (singles.length === 1) return { anoMin: singles[0], anoMax: singles[0] };
+  if (singles.length === 1) return { anoMin: singles[0] };
   if (singles.length === 2) return { anoMin: Math.min(...singles), anoMax: Math.max(...singles) };
 
   return {};
