@@ -82,8 +82,7 @@ Ano: {{ ano_min }} a {{ ano_max }}
 {{ cliente_nome }} - {{ cliente_telefone_formatted }}
 
 📍 *Região*
-{{ cidade_ref }} - {{ estado }}
-Raio: {{ raio_km }}km
+{{ cidade_ref }}{{#if estado}} - {{ estado }}{{/if}}
 
 ⏱ *Urgência*: {{ urgencia }}
 📅 *Validade*: {{ validade_dias }} dias
