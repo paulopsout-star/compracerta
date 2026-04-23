@@ -187,12 +187,7 @@ Os cadastros voltam a ser liberados amanhã às 00h. Se precisa cadastrar mais u
 
 🚗 _Cadastrar desejo:_ me diga o que o cliente procura
 📊 *status* - ver seus desejos ativos
-🔢 *próximo* - ver próxima opção de match
-📄 *detalhes* - detalhes do match atual
-↪️ *encaminhar* - texto pronto pro cliente
 ❌ *cancelar* - cancelar o que está fazendo
-📊 *relatorio* - link do seu dashboard
-❓ *ajuda* - este menu
 
 Quer começar um cadastro? É só me dizer o modelo que o cliente procura.`,
 
