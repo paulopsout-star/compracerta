@@ -56,15 +56,15 @@ async function isRateLimited(phoneE164: string): Promise<boolean> {
 }
 
 /**
- * Insere o registro inbound LOGO no início para servir como lock
- * idempotente. Retorna true se inseriu (siga o processamento), false
- * se houve violação de UNIQUE (duplicata — outra execução paralela já
- * está processando ou já processou).
+ * Lock idempotente atômico via UPSERT com ignoreDuplicates.
+ * Retorna { acquired: true } se foi a primeira a inserir o messageId.
+ * Retorna { acquired: false } se já existia (duplicata) OU em erro de DB
+ * (fail-closed: melhor não responder do que duplicar a resposta).
  */
-async function tryRegisterInbound(env: InboundEnvelope): Promise<boolean> {
+async function tryRegisterInbound(env: InboundEnvelope): Promise<{ acquired: boolean; reason?: string }> {
   const phoneE164 = toE164(env.phoneRaw);
   const contentType = env.audioUrl ? "audio" : env.imageUrl ? "image" : "text";
-  const { error } = await supabase.from("whatsapp_inbound_messages").insert({
+  const payload = {
     provider_message_id: env.providerMessageId,
     phone_e164: phoneE164,
     seller_id: null,
@@ -74,16 +74,30 @@ async function tryRegisterInbound(env: InboundEnvelope): Promise<boolean> {
     raw_payload: env.rawPayload,
     received_at: env.receivedAt.toISOString(),
     session_id: null,
-  });
-  if (!error) return true;
-  if (error.code === "23505") {
-    console.log("[Inbound] duplicate (UNIQUE violation) — skipping", { messageId: env.providerMessageId });
-    return false;
+  };
+
+  const { data, error } = await supabase
+    .from("whatsapp_inbound_messages")
+    .upsert(payload, { onConflict: "provider_message_id", ignoreDuplicates: true })
+    .select("id");
+
+  if (error) {
+    console.error("[Inbound] register error (fail-closed):", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      messageId: env.providerMessageId,
+    });
+    return { acquired: false, reason: `db_error:${error.code ?? "unknown"}` };
   }
-  console.warn("[Inbound] register error:", error.code, error.message);
-  // Em outro erro (ex: schema), seguimos processando mesmo sem registro
-  // pra não bloquear o atendimento. Mas logamos pra investigar.
-  return true;
+
+  // Com ignoreDuplicates: true, INSERT real → data = [{id}]; conflito → data = [].
+  if (!data || data.length === 0) {
+    console.log("[Inbound] duplicate skipped", { messageId: env.providerMessageId });
+    return { acquired: false, reason: "duplicate" };
+  }
+  return { acquired: true };
 }
 
 /**
@@ -120,9 +134,12 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
     }
 
     // LOCK idempotente: tenta inserir o registro logo de cara. Se outra
-    // execução paralela (Z-API retry) já inseriu, sai aqui sem enviar nada.
-    const acquired = await tryRegisterInbound(env);
-    if (!acquired) return { outcome: "duplicate" };
+    // execução paralela (Z-API retry) já inseriu OU se há erro de DB,
+    // sai aqui sem enviar nada (fail-closed).
+    const lock = await tryRegisterInbound(env);
+    if (!lock.acquired) {
+      return { outcome: "duplicate", reason: lock.reason };
+    }
 
     const phoneE164 = toE164(env.phoneRaw);
 
