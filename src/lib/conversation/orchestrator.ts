@@ -130,18 +130,31 @@ function parseForExpectedField(text: string, fieldKey: string, draft: DraftWish 
   }
 
   if (fieldKey === "precoMax") {
-    const m = trimmed.match(/^([\d.,]+)\s*(k|mil|m)?$/i);
-    if (m) {
-      const num = parseFloat(m[1].replace(/\./g, "").replace(",", "."));
-      if (!isNaN(num)) {
-        const suffix = m[2]?.toLowerCase();
-        const v =
-          suffix === "k" || suffix === "mil" ? num * 1000 :
-          suffix === "m" ? num * 1_000_000 :
-          num < 1000 ? num * 1000 : num;
-        return { precoMax: Math.round(v) };
-      }
-    }
+    // Aceita "até 100mil", "R$ 120.000", "100k", "150 mil", etc.
+    const cleaned = trimmed.toLowerCase();
+    const withAte = cleaned.match(/^(?:at[eé]|no m[aá]ximo|m[aá]x(?:imo)?)\s+(r\$\s*)?([\d.,]+)\s*(k|mil|m)?$/i);
+    const withRs = cleaned.match(/^r\$\s*([\d.,]+)\s*(k|mil|m)?$/i);
+    const plain = cleaned.match(/^([\d.,]+)\s*(k|mil|m)?$/i);
+    const m = withAte
+      ? { num: withAte[2], suffix: withAte[3] }
+      : withRs
+        ? { num: withRs[1], suffix: withRs[2] }
+        : plain
+          ? { num: plain[1], suffix: plain[2] }
+          : null;
+    if (!m) return {};
+
+    const num = parseFloat(m.num.replace(/\./g, "").replace(",", "."));
+    if (isNaN(num) || num <= 0) return {};
+    const suffix = m.suffix?.toLowerCase();
+
+    if (suffix === "k" || suffix === "mil") return { precoMax: Math.round(num * 1000) };
+    if (suffix === "m") return { precoMax: Math.round(num * 1_000_000) };
+
+    // Sem sufixo: evita ambiguidade com ano (ex: "2025" não deve virar preço)
+    if (num >= 2000 && num <= 2030) return {}; // parece ano → rejeita
+    if (num < 1000) return { precoMax: Math.round(num * 1000) };
+    return { precoMax: Math.round(num) };
   }
 
   if (fieldKey === "anoMin") {

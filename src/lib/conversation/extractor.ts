@@ -133,15 +133,19 @@ function capitalize(s: string): string {
 }
 
 function parsePrecoToken(raw: string): number | undefined {
-  const cleaned = raw.toLowerCase().replace(/[^\d,.kml]/g, "");
-  const match = cleaned.match(/^([\d.,]+)(k|mil|m)?$/);
+  // IMPORTANTE: não usar [^\d,.kml] para "limpar" — isso REMOVIA a letra 'i'
+  // de 'mil', quebrando todos os preços com sufixo 'mil'.
+  const cleaned = raw.toLowerCase().trim();
+  const match = cleaned.match(/^([\d.,]+)\s*(k|mil|m)?$/);
   if (!match) return undefined;
   const num = parseFloat(match[1].replace(/\./g, "").replace(",", "."));
-  if (isNaN(num)) return undefined;
+  if (isNaN(num) || num <= 0) return undefined;
   const suffix = match[2];
   if (suffix === "k" || suffix === "mil") return Math.round(num * 1000);
   if (suffix === "m") return Math.round(num * 1_000_000);
-  // Número solto grande → BRL; pequeno (< 1000) em contexto de preço → mil
+  // Número solto grande (>= 10000) → BRL absoluto; pequeno sem sufixo é
+  // ambíguo (pode ser mil ou ano). Tratamos como mil só se < 1000 (ex: "150"
+  // = R$ 150k). Valores intermediários ficam como BRL literal (raro).
   if (num < 1000) return Math.round(num * 1000);
   return Math.round(num);
 }
