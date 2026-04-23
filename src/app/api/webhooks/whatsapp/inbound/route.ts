@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     text: payload.text?.message,
     audioUrl: payload.audio?.audioUrl,
     imageUrl: payload.image?.imageUrl,
-    receivedAt: payload.momment ? new Date(payload.momment * 1000) : new Date(),
+    receivedAt: payload.momment ? new Date(payload.momment) : new Date(),
     rawPayload: payload,
   };
 
