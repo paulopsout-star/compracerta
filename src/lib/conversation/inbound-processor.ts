@@ -44,19 +44,6 @@ export interface ProcessResult {
   reason?: string;
 }
 
-async function isDuplicate(providerMessageId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("whatsapp_inbound_messages")
-    .select("id")
-    .eq("provider_message_id", providerMessageId)
-    .maybeSingle();
-  if (error) {
-    console.warn("[Inbound] idempotency check error:", error.message);
-    return false;
-  }
-  return Boolean(data);
-}
-
 async function isRateLimited(phoneE164: string): Promise<boolean> {
   const limit = await getNumber("rate_limit.inbound_per_min_per_user", 10);
   const since = new Date(Date.now() - 60_000).toISOString();
@@ -68,28 +55,55 @@ async function isRateLimited(phoneE164: string): Promise<boolean> {
   return (count ?? 0) >= limit;
 }
 
-async function registerInbound(
-  env: InboundEnvelope,
-  sellerId: string | null,
-  sessionId: string | null
-): Promise<void> {
+/**
+ * Insere o registro inbound LOGO no início para servir como lock
+ * idempotente. Retorna true se inseriu (siga o processamento), false
+ * se houve violação de UNIQUE (duplicata — outra execução paralela já
+ * está processando ou já processou).
+ */
+async function tryRegisterInbound(env: InboundEnvelope): Promise<boolean> {
   const phoneE164 = toE164(env.phoneRaw);
   const contentType = env.audioUrl ? "audio" : env.imageUrl ? "image" : "text";
   const { error } = await supabase.from("whatsapp_inbound_messages").insert({
     provider_message_id: env.providerMessageId,
     phone_e164: phoneE164,
-    seller_id: sellerId,
+    seller_id: null,
     content_type: contentType,
     content: env.text ?? null,
     media_url: env.audioUrl ?? env.imageUrl ?? null,
     raw_payload: env.rawPayload,
     received_at: env.receivedAt.toISOString(),
-    processed_at: new Date().toISOString(),
-    session_id: sessionId,
+    session_id: null,
   });
-  if (error && error.code !== "23505" /* unique_violation — race na idempotência */) {
-    console.warn("[Inbound] register error:", error.message);
+  if (!error) return true;
+  if (error.code === "23505") {
+    console.log("[Inbound] duplicate (UNIQUE violation) — skipping", { messageId: env.providerMessageId });
+    return false;
   }
+  console.warn("[Inbound] register error:", error.code, error.message);
+  // Em outro erro (ex: schema), seguimos processando mesmo sem registro
+  // pra não bloquear o atendimento. Mas logamos pra investigar.
+  return true;
+}
+
+/**
+ * Após identificação, completa o registro com seller_id e session_id.
+ * Best-effort: warn em erro mas não interrompe.
+ */
+async function attachInboundContext(
+  providerMessageId: string,
+  sellerId: string | null,
+  sessionId: string | null
+): Promise<void> {
+  if (!sellerId && !sessionId) return;
+  const update: Record<string, unknown> = { processed_at: new Date().toISOString() };
+  if (sellerId) update.seller_id = sellerId;
+  if (sessionId) update.session_id = sessionId;
+  const { error } = await supabase
+    .from("whatsapp_inbound_messages")
+    .update(update)
+    .eq("provider_message_id", providerMessageId);
+  if (error) console.warn("[Inbound] attach context error:", error.message);
 }
 
 export async function processInbound(env: InboundEnvelope): Promise<ProcessResult> {
@@ -104,9 +118,11 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
     if (!(await isEnabled("whatsapp.inbound.enabled"))) {
       return { outcome: "inbound_disabled" };
     }
-    if (await isDuplicate(env.providerMessageId)) {
-      return { outcome: "duplicate" };
-    }
+
+    // LOCK idempotente: tenta inserir o registro logo de cara. Se outra
+    // execução paralela (Z-API retry) já inseriu, sai aqui sem enviar nada.
+    const acquired = await tryRegisterInbound(env);
+    if (!acquired) return { outcome: "duplicate" };
 
     const phoneE164 = toE164(env.phoneRaw);
 
@@ -119,13 +135,11 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
     const ident = await identifySender(phoneE164, { displayName: env.senderName });
     console.log("[Inbound] ident result", { kind: ident.kind, userId: ident.kind !== "unknown" ? ident.user.id : null });
 
-    // Desconhecido — resposta padrão, NÃO persiste (LGPD)
+    // Desconhecido — resposta padrão (registro já foi feito acima)
     if (ident.kind === "unknown") {
       await sendText(env.phoneRaw, renderTemplate("numero_nao_cadastrado"), {
         templateName: "numero_nao_cadastrado",
       });
-      // auditoria mínima (sem seller_id)
-      await registerInbound(env, null, null);
       return { outcome: "unknown_sender" };
     }
 
@@ -135,14 +149,14 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
         renderTemplate("vendedor_inativo", { vendedor_nome: ident.user.name }),
         { recipientId: ident.user.id, recipientType: "vendedor", templateName: "vendedor_inativo" }
       );
-      await registerInbound(env, ident.user.id, null);
+      await attachInboundContext(env.providerMessageId, ident.user.id, null);
       return { outcome: "inactive_seller" };
     }
 
     // Autenticado — cria/atualiza sessão
     const user = ident.user;
     const session = await getOrCreateActiveSession(user.id, phoneE164);
-    await registerInbound(env, user.id, session.id);
+    await attachInboundContext(env.providerMessageId, user.id, session.id);
 
     // Mídia — checa flags
     if (env.audioUrl && !(await isEnabled("conversation.audio_transcription.enabled"))) {
