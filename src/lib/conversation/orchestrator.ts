@@ -422,7 +422,8 @@ async function notifyMatch(
   session: ConversationSessionRow,
   user: AuthenticatedUser,
   wishId: string,
-  matches: MatchSummary[]
+  matches: MatchSummary[],
+  clientInfo?: { name?: string; phone?: string }
 ): Promise<void> {
   if (!(await isEnabled("match.auto_notify.enabled"))) return;
   if (matches.length === 0) return;
@@ -448,6 +449,8 @@ async function notifyMatch(
     : "";
 
   const body = outCityPrefix + renderTemplate("match_encontrado", {
+    cliente_nome: clientInfo?.name ?? "—",
+    cliente_telefone_formatted: clientInfo?.phone ? formatPhoneBR(clientInfo.phone) : "—",
     marca: top.offer.brand,
     modelo: top.offer.model,
     versao: top.offer.version ?? "",
@@ -493,7 +496,10 @@ async function runMatchAndNotify(
   try {
     const matches = await runMatchingForWish(wishId);
     if (matches.length > 0) {
-      await notifyMatch(session, user, wishId, matches);
+      await notifyMatch(session, user, wishId, matches, {
+        name: draft.clienteNome,
+        phone: draft.clienteTelefone,
+      });
     } else {
       await sendSemMatch(session, user, draft);
     }

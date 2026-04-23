@@ -105,6 +105,9 @@ _Enquanto isso, você pode:_
 
   match_encontrado: `🎯 *Encontramos um match!*
 
+🙋 *Cliente:* {{ cliente_nome }}
+📞 {{ cliente_telefone_formatted }}
+
 *{{ marca }} {{ modelo }}{{#if versao}} {{ versao }}{{/if}} {{ ano }}*
 📏 {{ km_formatted }} km
 🎨 {{ cor }}
@@ -118,7 +121,7 @@ _Enquanto isso, você pode:_
 {{ origem_detalhes }}
 Status: {{ status_veiculo }}
 
-👤 *Contato*
+👤 *Contato do anunciante*
 {{ contato_nome }}
 {{ contato_telefone }}{{#if alternativas_linha}}
 

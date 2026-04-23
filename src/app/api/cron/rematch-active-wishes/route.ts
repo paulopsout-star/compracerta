@@ -14,7 +14,7 @@ import { supabase } from "@/lib/db";
 import { getNumber, isEnabled } from "@/lib/feature-flags";
 import { runMatchingForWish, type MatchSummary } from "@/lib/services/match-runner";
 import { sendText } from "@/lib/services/whatsapp";
-import { renderTemplate } from "@/lib/whatsapp-templates";
+import { renderTemplate, formatPhoneBR } from "@/lib/whatsapp-templates";
 import { hasBeenNotified, recordNotification } from "@/lib/services/notification-log";
 import type { Offer } from "@/types";
 
@@ -34,6 +34,7 @@ interface WishListRow {
   seller_id: string;
   brand: string;
   model: string;
+  client_name: string;
   client_phone: string;
   expires_at: string;
 }
@@ -75,7 +76,8 @@ async function notifySellerForNewMatch(
   sellerPhone: string,
   wishId: string,
   top: MatchSummary,
-  totalMatches: number
+  totalMatches: number,
+  clientInfo?: { name?: string; phone?: string }
 ): Promise<boolean> {
   if (top.matchId && await hasBeenNotified(top.matchId, "whatsapp")) {
     return false;
@@ -88,6 +90,8 @@ async function notifySellerForNewMatch(
     : "";
 
   const body = outCityPrefix + renderTemplate("match_encontrado", {
+    cliente_nome: clientInfo?.name ?? "—",
+    cliente_telefone_formatted: clientInfo?.phone ? formatPhoneBR(clientInfo.phone) : "—",
     marca: top.offer.brand,
     modelo: top.offer.model,
     versao: top.offer.version ?? "",
@@ -148,7 +152,7 @@ export async function GET(req: NextRequest) {
     // Busca desejos ativos, não expirados, limitado a 50 por execução
     const { data: wishes, error } = await supabase
       .from("wishes")
-      .select("id, seller_id, brand, model, client_phone, expires_at")
+      .select("id, seller_id, brand, model, client_name, client_phone, expires_at")
       .in("status", ["procurando", "match_encontrado"])
       .gt("expires_at", now)
       .order("updated_at", { ascending: true })
@@ -182,7 +186,10 @@ export async function GET(req: NextRequest) {
         if (topNew && autoNotify) {
           const seller = sellerPhoneMap.get(w.seller_id);
           if (seller?.active && seller.phone) {
-            notified = await notifySellerForNewMatch(w.seller_id, seller.phone, w.id, topNew, pool.length);
+            notified = await notifySellerForNewMatch(
+              w.seller_id, seller.phone, w.id, topNew, pool.length,
+              { name: w.client_name, phone: w.client_phone }
+            );
           }
         }
 
