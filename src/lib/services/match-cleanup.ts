@@ -1,20 +1,22 @@
 import { supabase } from "@/lib/db";
 
 /**
- * Remove matches orfaos de um wish: matches cujas offers externas
- * (source=avaliador) nao aparecem mais na resposta atual da API.
+ * Marca offers orfaos de um wish como inactive: offers (source=avaliador)
+ * que nao aparecem mais na resposta atual da API.
  *
- * Tambem marca as offers orfaos como inactive.
+ * NAO deleta linhas de `matches`. Manter o match preserva a chave de
+ * idempotencia da notificacao (notifications.match_id). Se deletassemos,
+ * uma oferta que some e volta seria recriada com novo match_id e o
+ * vendedor seria notificado de novo do mesmo veiculo.
  *
  * @param wishId id do desejo sendo rematchado
  * @param presentSourceIdsBySource map source → Set<source_id> presentes na API agora
- * @returns numero de matches removidos
+ * @returns numero de offers desativadas
  */
 export async function cleanupStaleMatchesForWish(
   wishId: string,
   presentSourceIdsBySource: Map<string, Set<string>>
 ): Promise<number> {
-  // Buscar matches ativos do wish que apontam para offers de fontes externas
   const { data: existingMatches } = await supabase
     .from("matches")
     .select("id, offer_id, offers!inner(id, source, source_id)")
@@ -22,41 +24,21 @@ export async function cleanupStaleMatchesForWish(
 
   if (!existingMatches) return 0;
 
-  const toRemoveMatchIds: string[] = [];
-  const toDeactivateOfferIds: string[] = [];
+  const staleOfferIds: string[] = [];
 
   for (const m of existingMatches) {
     const offer = m.offers as unknown as { id: string; source: string; source_id: string } | null;
     if (!offer) continue;
-    // Lojistas nao vem da API externa — skip
     if (offer.source === "estoque_lojista") continue;
 
     const presentSet = presentSourceIdsBySource.get(offer.source);
     const stillPresent = presentSet?.has(offer.source_id) ?? false;
 
-    if (!stillPresent) {
-      toRemoveMatchIds.push(m.id as string);
-      toDeactivateOfferIds.push(offer.id);
-    }
+    if (!stillPresent) staleOfferIds.push(offer.id);
   }
 
-  if (toRemoveMatchIds.length === 0) return 0;
+  if (staleOfferIds.length === 0) return 0;
 
-  // Remover matches
-  await supabase.from("matches").delete().in("id", toRemoveMatchIds);
-
-  // Desativar offers (se nao tem mais match ativo em lugar nenhum)
-  // Verificar primeiro quais offers ainda tem outros matches
-  const { data: stillLinked } = await supabase
-    .from("matches")
-    .select("offer_id")
-    .in("offer_id", toDeactivateOfferIds);
-  const linkedSet = new Set((stillLinked ?? []).map((r) => r.offer_id as string));
-  const trulyOrphanedOffers = toDeactivateOfferIds.filter((id) => !linkedSet.has(id));
-
-  if (trulyOrphanedOffers.length > 0) {
-    await supabase.from("offers").update({ active: false }).in("id", trulyOrphanedOffers);
-  }
-
-  return toRemoveMatchIds.length;
+  await supabase.from("offers").update({ active: false }).in("id", staleOfferIds);
+  return staleOfferIds.length;
 }

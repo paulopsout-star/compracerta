@@ -204,6 +204,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("matches")
       .select("*, wishes!inner(*), offers!inner(*)")
+      .eq("offers.active", true)
       .order("score", { ascending: false });
 
     if (wishId) query = query.eq("wish_id", wishId);
