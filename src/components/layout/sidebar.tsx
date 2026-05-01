@@ -18,7 +18,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-export type UserRole = "vendedor" | "gestor" | "lojista" | "admin";
+export type UserRole = "vendedor" | "gestor" | "lojista" | "admin" | "superadmin";
 
 interface NavItem {
   label: string;
@@ -56,6 +56,14 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Logs", href: "/admin/logs", icon: ScrollText },
     { label: "Parâmetros", href: "/admin/parametros", icon: Settings },
   ],
+  superadmin: [
+    { label: "Painel", href: "/admin", icon: LayoutDashboard },
+    { label: "Usuários", href: "/admin/usuarios", icon: Users },
+    { label: "Relatórios", href: "/admin/relatorios", icon: BarChart3 },
+    { label: "Integrações", href: "/admin/integracoes", icon: Plug },
+    { label: "Logs", href: "/admin/logs", icon: ScrollText },
+    { label: "Parâmetros", href: "/admin/parametros", icon: Settings },
+  ],
 };
 
 interface SidebarProps {
@@ -85,12 +93,21 @@ function NavLink({ item, isActive }: { item: NavItem; isActive: boolean }) {
   );
 }
 
+const HOME_PATH: Record<UserRole, string> = {
+  vendedor: "/vendedor",
+  gestor: "/gestor",
+  lojista: "/lojista",
+  admin: "/admin",
+  superadmin: "/admin",
+};
+
 export function Sidebar({ role, className }: SidebarProps) {
   const pathname = usePathname();
   const items = NAV_ITEMS[role];
+  const home = HOME_PATH[role];
 
   function isActive(href: string) {
-    if (href === `/${role}`) return pathname === href;
+    if (href === home) return pathname === href;
     return pathname === href || pathname.startsWith(href + "/");
   }
 

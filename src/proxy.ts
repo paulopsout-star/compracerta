@@ -9,6 +9,15 @@ const ROLE_PATHS: Record<string, string[]> = {
   gestor: ["/gestor"],
   lojista: ["/lojista"],
   admin: ["/admin"],
+  superadmin: ["/admin"],
+};
+
+const ROLE_HOME: Record<string, string> = {
+  vendedor: "/vendedor",
+  gestor: "/gestor",
+  lojista: "/lojista",
+  admin: "/admin",
+  superadmin: "/admin",
 };
 
 export const proxy = auth(async (req) => {
@@ -55,9 +64,34 @@ export const proxy = auth(async (req) => {
   }
 
   const role = (user as { role?: string }).role;
+  const userTenantId = (user as { tenantId?: string | null }).tenantId ?? null;
 
-  // Check role-based access
-  if (role && role !== "admin") {
+  // Cross-tenant guard: usuários comuns só podem acessar o tenant que os
+  // dono. Superadmin atravessa livre. Tenant resolvido pelo host (acima)
+  // é a referência para esse check.
+  if (
+    role &&
+    role !== "superadmin" &&
+    tenant &&
+    userTenantId &&
+    userTenantId !== tenant.id &&
+    !pathname.startsWith("/api/auth")
+  ) {
+    // Não-API: força logout e manda pro login (avoid leaking pelo simples
+    // redirect). Para API: 403.
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Tenant mismatch", code: "tenant_forbidden" },
+        { status: 403 }
+      );
+    }
+    const loginUrl = new URL("/login", req.nextUrl.origin);
+    loginUrl.searchParams.set("error", "tenant_mismatch");
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Role-based access (admin e superadmin têm acesso amplo a /admin)
+  if (role && role !== "admin" && role !== "superadmin") {
     const allowedPaths = ROLE_PATHS[role] ?? [];
     const hasAccess =
       allowedPaths.some((p) => pathname.startsWith(p)) ||
@@ -67,7 +101,8 @@ export const proxy = auth(async (req) => {
 
     if (!hasAccess) {
       // Redirect to their own dashboard
-      return NextResponse.redirect(new URL(`/${role}`, req.nextUrl.origin));
+      const home = ROLE_HOME[role] ?? "/";
+      return NextResponse.redirect(new URL(home, req.nextUrl.origin));
     }
   }
 

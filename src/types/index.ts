@@ -1,4 +1,4 @@
-export type UserRole = "vendedor" | "gestor" | "lojista" | "admin";
+export type UserRole = "vendedor" | "gestor" | "lojista" | "admin" | "superadmin";
 
 export type UrgencyLevel = "baixa" | "media" | "alta";
 

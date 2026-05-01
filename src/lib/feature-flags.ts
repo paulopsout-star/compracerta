@@ -62,13 +62,17 @@ type CacheEntry = { record: FeatureFlagRecord; cachedAt: number };
 const cache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 30_000;
 
+function cacheKey(key: string, tenantId?: string | null): string {
+  return tenantId ? `${tenantId}::${key}` : key;
+}
+
 function defaultFor(key: string): FeatureFlagRecord {
   const d = FEATURE_FLAG_DEFAULTS[key];
   if (!d) return { key, enabled: false, value: null, environment: "production" };
   return { key, enabled: d.enabled, value: d.value ?? null, description: d.description, environment: "production" };
 }
 
-async function loadFromDb(key: string): Promise<FeatureFlagRecord | null> {
+async function loadGlobalFromDb(key: string): Promise<FeatureFlagRecord | null> {
   try {
     const { data, error } = await supabase
       .from("feature_flags")
@@ -82,35 +86,82 @@ async function loadFromDb(key: string): Promise<FeatureFlagRecord | null> {
   }
 }
 
-export async function getFlag(key: string): Promise<FeatureFlagRecord> {
-  const cached = cache.get(key);
+async function loadTenantFromDb(tenantId: string, key: string): Promise<FeatureFlagRecord | null> {
+  try {
+    const { data, error } = await supabase
+      .from("tenant_feature_flags")
+      .select("key, enabled, value, description")
+      .eq("tenant_id", tenantId)
+      .eq("key", key)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      key: data.key,
+      enabled: data.enabled,
+      value: data.value as FlagValue,
+      description: data.description,
+      environment: "production",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve flag com hierarquia:
+ *   tenant_feature_flags(tenant_id, key) -> feature_flags(key) -> defaults estáticos.
+ * Quando tenantId é omitido, retorna apenas o nível global.
+ */
+export async function getFlag(key: string, tenantId?: string | null): Promise<FeatureFlagRecord> {
+  const ck = cacheKey(key, tenantId);
+  const cached = cache.get(ck);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return cached.record;
 
-  const record = (await loadFromDb(key)) ?? defaultFor(key);
-  cache.set(key, { record, cachedAt: Date.now() });
+  let record: FeatureFlagRecord | null = null;
+  if (tenantId) {
+    record = await loadTenantFromDb(tenantId, key);
+  }
+  if (!record) record = await loadGlobalFromDb(key);
+  if (!record) record = defaultFor(key);
+
+  cache.set(ck, { record, cachedAt: Date.now() });
   return record;
 }
 
-export async function isEnabled(key: string): Promise<boolean> {
-  return (await getFlag(key)).enabled;
+export async function isEnabled(key: string, tenantId?: string | null): Promise<boolean> {
+  return (await getFlag(key, tenantId)).enabled;
 }
 
-export async function getValue<T extends FlagValue = FlagValue>(key: string): Promise<T> {
-  const { value } = await getFlag(key);
+export async function getValue<T extends FlagValue = FlagValue>(key: string, tenantId?: string | null): Promise<T> {
+  const { value } = await getFlag(key, tenantId);
   return value as T;
 }
 
-export async function getNumber(key: string, fallback: number): Promise<number> {
-  const v = await getValue<FlagValue>(key);
+export async function getNumber(key: string, fallback: number, tenantId?: string | null): Promise<number> {
+  const v = await getValue<FlagValue>(key, tenantId);
   return typeof v === "number" ? v : fallback;
 }
 
-export async function getString(key: string, fallback: string): Promise<string> {
-  const v = await getValue<FlagValue>(key);
+export async function getString(key: string, fallback: string, tenantId?: string | null): Promise<string> {
+  const v = await getValue<FlagValue>(key, tenantId);
   return typeof v === "string" ? v : fallback;
 }
 
-export function invalidateCache(key?: string) {
-  if (key) cache.delete(key);
-  else cache.clear();
+/**
+ * Invalida cache. Sem args = limpa tudo. Só `key` = limpa global e todos
+ * os tenants para essa key. `key` + `tenantId` = entrada específica.
+ */
+export function invalidateCache(key?: string, tenantId?: string | null) {
+  if (!key) {
+    cache.clear();
+    return;
+  }
+  if (tenantId !== undefined) {
+    cache.delete(cacheKey(key, tenantId));
+    return;
+  }
+  // limpa todas as entradas que terminam com `::key` ou são exatamente `key`
+  for (const k of cache.keys()) {
+    if (k === key || k.endsWith(`::${key}`)) cache.delete(k);
+  }
 }
