@@ -17,6 +17,7 @@ import {
   ScrollText,
   Plug,
   Wallet,
+  Building2,
 } from "lucide-react";
 
 export type UserRole = "vendedor" | "gestor" | "lojista" | "admin" | "superadmin";
@@ -58,6 +59,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { label: "Parâmetros", href: "/admin/parametros", icon: Settings },
   ],
   superadmin: [
+    { label: "Tenants", href: "/superadmin/tenants", icon: Building2 },
     { label: "Painel", href: "/admin", icon: LayoutDashboard },
     { label: "Usuários", href: "/admin/usuarios", icon: Users },
     { label: "Relatórios", href: "/admin/relatorios", icon: BarChart3 },

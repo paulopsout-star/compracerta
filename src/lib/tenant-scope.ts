@@ -102,3 +102,16 @@ export async function getAdminScope(
   }
   return result;
 }
+
+/**
+ * Versão para rotas exclusivas de superadmin (gestão de tenants).
+ * Usuários com role admin (do tenant) não passam.
+ */
+export async function getSuperadminScope(): Promise<ScopeResult> {
+  const result = await getRequestScope();
+  if (!result.ok) return result;
+  if (result.scope.role !== "superadmin") {
+    return { ok: false, status: 403, reason: "superadmin_required" };
+  }
+  return result;
+}
