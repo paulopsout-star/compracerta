@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { supabase, findById, update, remove, insert } from "@/lib/db";
+import { supabase, update, remove } from "@/lib/db";
 import { wishSchema } from "@/lib/validators/wish";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish, buildPresentSourceIdsSet } from "@/lib/services/avaliador-api";
 import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
+import { getRequestScope } from "@/lib/tenant-scope";
 import type { Wish, Offer } from "@/types";
+
+async function ensureWishInTenant(wishId: string, tenantId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("wishes")
+    .select("id")
+    .eq("id", wishId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  return !!data;
+}
 
 interface ImmediateMatch {
   score: number;
@@ -23,11 +33,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+    }
+    const { scope } = scopeRes;
 
     const { id } = await params;
-    const wish = await findById("wishes", id);
+    const { data: wish, error } = await supabase
+      .from("wishes")
+      .select("*")
+      .eq("id", id)
+      .eq("tenant_id", scope.tenantId)
+      .maybeSingle();
+    if (error || !wish) {
+      return NextResponse.json({ error: "Desejo não encontrado" }, { status: 404 });
+    }
     return NextResponse.json(wish);
   } catch {
     return NextResponse.json({ error: "Desejo não encontrado" }, { status: 404 });
@@ -42,10 +63,16 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+    }
+    const { scope } = scopeRes;
 
     const { id } = await params;
+    if (!(await ensureWishInTenant(id, scope.tenantId))) {
+      return NextResponse.json({ error: "Desejo não encontrado" }, { status: 404 });
+    }
     const body = await request.json();
 
     // Simple status/notes update (no matching rerun)
@@ -116,7 +143,11 @@ export async function PATCH(
 
     const immediateMatches: ImmediateMatch[] = [];
     try {
-      const { data: localOffers } = await supabase.from("offers").select("*").eq("active", true);
+      const { data: localOffers } = await supabase
+        .from("offers")
+        .select("*")
+        .eq("tenant_id", scope.tenantId)
+        .eq("active", true);
       const external = await fetchExternalOffersForWish(wish);
 
       // Cleanup: remove matches antigos que apontam para offers que sumiram da API
@@ -153,6 +184,7 @@ export async function PATCH(
         let offerId = offer.id;
         if (offer.source !== "estoque_lojista") {
           const { data: upserted } = await supabase.from("offers").upsert({
+            tenant_id: scope.tenantId,
             source: offer.source, source_id: offer.sourceId, plate: offer.plate ?? null,
             brand: offer.brand, model: offer.model, version: offer.version ?? null,
             year: offer.year, km: offer.km, color: offer.color ?? null,
@@ -168,7 +200,7 @@ export async function PATCH(
 
         const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
         await supabase.from("matches").upsert(
-          { wish_id: id, offer_id: offerId, score: result.score, status: matchStatus },
+          { tenant_id: scope.tenantId, wish_id: id, offer_id: offerId, score: result.score, status: matchStatus },
           { onConflict: "wish_id,offer_id" }
         );
       }
@@ -200,10 +232,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
-    if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+    }
+    const { scope } = scopeRes;
 
     const { id } = await params;
+    if (!(await ensureWishInTenant(id, scope.tenantId))) {
+      return NextResponse.json({ error: "Desejo não encontrado" }, { status: 404 });
+    }
 
     // Cascata manual (Supabase sem ON DELETE CASCADE configurado):
     //   notifications → match_id → matches → wish_id → wishes

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/db";
+import { getAdminScope } from "@/lib/tenant-scope";
 
-const ROLES = ["vendedor", "gestor", "lojista", "admin"] as const;
+const ROLES = ["vendedor", "gestor", "lojista", "admin", "superadmin"] as const;
 
 /**
  * Normaliza telefone para E.164 brasileiro celular ("+55479XXXXXXXX").
@@ -41,25 +41,21 @@ const createSchema = z.object({
   { message: "Vendedor precisa de telefone (acesso via WhatsApp)", path: ["phone"] }
 );
 
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) return { error: NextResponse.json({ error: "Não autorizado" }, { status: 401 }) };
-  const role = (session.user as Record<string, unknown>).role as string;
-  if (role !== "admin") return { error: NextResponse.json({ error: "Acesso negado" }, { status: 403 }) };
-  return { session };
-}
-
 export async function GET() {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) {
+    return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+  }
+  const { scope } = scopeRes;
   try {
     const [usersRes, dealershipsRes, storesRes] = await Promise.all([
       supabase
         .from("users")
         .select("id, name, email, phone, role, dealership_id, dealer_store_id, active, created_at")
+        .eq("tenant_id", scope.tenantId)
         .order("created_at", { ascending: false }),
-      supabase.from("dealerships").select("id, name, city, state, active").order("name"),
-      supabase.from("dealer_stores").select("id, name, city, state, active").order("name"),
+      supabase.from("dealerships").select("id, name, city, state, active").eq("tenant_id", scope.tenantId).order("name"),
+      supabase.from("dealer_stores").select("id, name, city, state, active").eq("tenant_id", scope.tenantId).order("name"),
     ]);
     if (usersRes.error) throw usersRes.error;
     return NextResponse.json({
@@ -74,8 +70,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { error } = await requireAdmin();
-  if (error) return error;
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) {
+    return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+  }
+  const { scope } = scopeRes;
 
   try {
     const body = await request.json();
@@ -85,9 +84,20 @@ export async function POST(request: NextRequest) {
     }
     const d = parsed.data;
 
-    const { data: existing } = await supabase.from("users").select("id").eq("email", d.email).maybeSingle();
+    // Email único dentro do tenant (índice users_tenant_email_unique).
+    const { data: existing } = await supabase
+      .from("users")
+      .select("id")
+      .eq("tenant_id", scope.tenantId)
+      .eq("email", d.email)
+      .maybeSingle();
     if (existing) {
-      return NextResponse.json({ error: "E-mail já cadastrado" }, { status: 409 });
+      return NextResponse.json({ error: "E-mail já cadastrado neste tenant" }, { status: 409 });
+    }
+
+    // Apenas superadmin pode criar outro superadmin.
+    if (d.role === "superadmin" && !scope.isSuperadmin) {
+      return NextResponse.json({ error: "Apenas superadmin pode criar superadmin" }, { status: 403 });
     }
 
     const passwordHash = await hash(d.password, 12);
@@ -95,6 +105,7 @@ export async function POST(request: NextRequest) {
     const { data: created, error: dbError } = await supabase
       .from("users")
       .insert({
+        tenant_id: scope.tenantId,
         name: d.name,
         email: d.email,
         phone: normalizePhone(d.phone),

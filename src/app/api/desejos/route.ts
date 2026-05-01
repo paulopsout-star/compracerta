@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
 import { wishSchema } from "@/lib/validators/wish";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish, buildPresentSourceIdsSet } from "@/lib/services/avaliador-api";
 import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
+import { getRequestScope } from "@/lib/tenant-scope";
 import type { Wish, Offer } from "@/types";
 
 interface ImmediateMatch {
@@ -28,10 +28,11 @@ interface ImmediateMatch {
 // POST /api/desejos — Create a new wish
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const body = await request.json();
     const parsed = wishSchema.safeParse(body);
@@ -48,8 +49,9 @@ export async function POST(request: NextRequest) {
     expiresAt.setDate(expiresAt.getDate() + data.validityDays);
 
     const wishRow = (await insert("wishes", {
-      seller_id: session.user.id,
-      dealership_id: (session.user as Record<string, unknown>).dealershipId ?? null,
+      tenant_id: scope.tenantId,
+      seller_id: scope.userId,
+      dealership_id: scope.dealershipId ?? null,
       client_name: data.clientName,
       client_phone: data.clientPhone,
       client_cpf: data.clientCpf || null,
@@ -109,7 +111,11 @@ export async function POST(request: NextRequest) {
       console.log(`[Desejo] Novo desejo ${wish.id}: ${wish.brand} ${wish.model}, UF=${wish.stateRef}, cidade=${wish.cityRef}, kmMax=${wish.kmMax}`);
 
       // Fetch local offers (lojistas) + external (Avaliador Digital)
-      const { data: localOffers } = await supabase.from("offers").select("*").eq("active", true);
+      const { data: localOffers } = await supabase
+        .from("offers")
+        .select("*")
+        .eq("tenant_id", scope.tenantId)
+        .eq("active", true);
       const external = await fetchExternalOffersForWish(wish);
 
       // Cleanup: remove matches antigos que apontam para offers que sumiram da API
@@ -165,10 +171,14 @@ export async function POST(request: NextRequest) {
         // Persist external offers and create match records (FK integrity)
         let offerId = offer.id;
         if (offer.source !== "estoque_lojista") {
+          // NOTE: onConflict ainda usa (source, source_id) global — ate PR2.5
+          // remover o UNIQUE antigo. Com multi-tenant ativo, isso colide entre
+          // tenants. Seguro enquanto soh ha 1 tenant ativo.
           const { data: upserted } = await supabase
             .from("offers")
             .upsert(
               {
+                tenant_id: scope.tenantId,
                 source: offer.source,
                 source_id: offer.sourceId,
                 plate: offer.plate ?? null,
@@ -196,7 +206,7 @@ export async function POST(request: NextRequest) {
 
         const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
         await supabase.from("matches").upsert(
-          { wish_id: wish.id, offer_id: offerId, score: result.score, status: matchStatus },
+          { tenant_id: scope.tenantId, wish_id: wish.id, offer_id: offerId, score: result.score, status: matchStatus },
           { onConflict: "wish_id,offer_id" }
         );
       }
@@ -236,10 +246,11 @@ export async function POST(request: NextRequest) {
 // GET /api/desejos — List wishes (with filters)
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get("status");
@@ -251,20 +262,19 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("wishes")
       .select("*", { count: "exact" })
+      .eq("tenant_id", scope.tenantId)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
-    // Role-based filtering
-    const role = (session.user as Record<string, unknown>).role as string;
-    if (role === "vendedor") {
-      query = query.eq("seller_id", session.user.id);
-    } else if (role === "gestor") {
-      const dealershipId = (session.user as Record<string, unknown>).dealershipId;
-      if (dealershipId) query = query.eq("dealership_id", dealershipId);
+    // Role-based filtering (dentro do tenant)
+    if (scope.role === "vendedor") {
+      query = query.eq("seller_id", scope.userId);
+    } else if (scope.role === "gestor" && scope.dealershipId) {
+      query = query.eq("dealership_id", scope.dealershipId);
     }
 
     if (status) query = query.eq("status", status);
-    if (sellerId && role !== "vendedor") query = query.eq("seller_id", sellerId);
+    if (sellerId && scope.role !== "vendedor") query = query.eq("seller_id", sellerId);
 
     const { data, error, count } = await query;
     if (error) throw error;

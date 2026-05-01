@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/db";
+import { getAdminScope } from "@/lib/tenant-scope";
 
-const ROLES = ["vendedor", "gestor", "lojista", "admin"] as const;
+const ROLES = ["vendedor", "gestor", "lojista", "admin", "superadmin"] as const;
 
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -34,21 +34,16 @@ const updateSchema = z.object({
   password: z.string().min(6).optional(),
 });
 
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) return { error: NextResponse.json({ error: "Não autorizado" }, { status: 401 }) };
-  const role = (session.user as Record<string, unknown>).role as string;
-  if (role !== "admin") return { error: NextResponse.json({ error: "Acesso negado" }, { status: 403 }) };
-  return { session, userId: session.user.id as string };
-}
-
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
 export async function PATCH(request: NextRequest, ctx: RouteContext) {
-  const gate = await requireAdmin();
-  if (gate.error) return gate.error;
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) {
+    return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+  }
+  const { scope } = scopeRes;
 
   const { id } = await ctx.params;
   try {
@@ -60,31 +55,44 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
 
     const d = parsed.data;
 
-    // Conflito de e-mail (só se email sendo alterado)
+    // Garante que o usuário-alvo pertence ao tenant atual (admin não cruza).
+    const { data: targetUser } = await supabase
+      .from("users")
+      .select("id, tenant_id, role, phone")
+      .eq("id", id)
+      .maybeSingle();
+    if (!targetUser || targetUser.tenant_id !== scope.tenantId) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+    }
+
+    // Apenas superadmin pode promover/rebaixar superadmin.
+    if (d.role !== undefined && d.role === "superadmin" && !scope.isSuperadmin) {
+      return NextResponse.json({ error: "Apenas superadmin pode atribuir superadmin" }, { status: 403 });
+    }
+    if (targetUser.role === "superadmin" && !scope.isSuperadmin) {
+      return NextResponse.json({ error: "Apenas superadmin pode editar superadmin" }, { status: 403 });
+    }
+
+    // Conflito de e-mail dentro do mesmo tenant
     if (d.email) {
       const { data: existing } = await supabase
         .from("users")
         .select("id")
+        .eq("tenant_id", scope.tenantId)
         .eq("email", d.email)
         .neq("id", id)
         .maybeSingle();
       if (existing) {
-        return NextResponse.json({ error: "E-mail já usado por outro usuário" }, { status: 409 });
+        return NextResponse.json({ error: "E-mail já usado por outro usuário deste tenant" }, { status: 409 });
       }
     }
 
-    // Vendedor exige telefone no estado FINAL pós-update — carrega user atual
-    // para resolver o caso "user já vendedor, está atualizando só name".
+    // Vendedor exige telefone no estado FINAL pós-update.
     if (d.role !== undefined || d.phone !== undefined) {
-      const { data: current } = await supabase
-        .from("users")
-        .select("role, phone")
-        .eq("id", id)
-        .single();
-      const finalRole = d.role ?? (current?.role as string | undefined);
+      const finalRole = d.role ?? (targetUser.role as string);
       const finalPhoneNormalized = d.phone !== undefined
         ? normalizePhone(d.phone)
-        : normalizePhone(current?.phone as string | null | undefined);
+        : normalizePhone(targetUser.phone as string | null | undefined);
       if (finalRole === "vendedor" && !finalPhoneNormalized) {
         return NextResponse.json(
           { error: "Vendedor precisa de telefone com 11 dígitos (acesso via WhatsApp)" },
@@ -107,6 +115,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
       .from("users")
       .update(update)
       .eq("id", id)
+      .eq("tenant_id", scope.tenantId)
       .select("id, name, email, phone, role, dealership_id, dealer_store_id, active, created_at")
       .single();
 
@@ -121,17 +130,24 @@ export async function PATCH(request: NextRequest, ctx: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, ctx: RouteContext) {
-  const gate = await requireAdmin();
-  if (gate.error) return gate.error;
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) {
+    return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+  }
+  const { scope } = scopeRes;
 
   const { id } = await ctx.params;
-  if (id === gate.userId) {
+  if (id === scope.userId) {
     return NextResponse.json({ error: "Você não pode excluir a própria conta" }, { status: 400 });
   }
 
   try {
     // Soft delete: apenas desativa. Exclusão hard causaria problemas com wishes/notifications FK.
-    const { error } = await supabase.from("users").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id);
+    const { error } = await supabase
+      .from("users")
+      .update({ active: false, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("tenant_id", scope.tenantId);
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (err) {

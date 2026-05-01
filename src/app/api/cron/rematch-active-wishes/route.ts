@@ -31,6 +31,7 @@ function verifyCronAuth(req: NextRequest): boolean {
 
 interface WishListRow {
   id: string;
+  tenant_id: string;
   seller_id: string;
   brand: string;
   model: string;
@@ -72,6 +73,7 @@ function buildAlternativasLinha(alt: number, wishId: string): string {
 }
 
 async function notifySellerForNewMatch(
+  tenantId: string,
   sellerId: string,
   sellerPhone: string,
   wishId: string,
@@ -81,6 +83,7 @@ async function notifySellerForNewMatch(
 ): Promise<boolean> {
   // Claim atomico via notification_dedup (chave estavel por identidade da oferta).
   const claim = await claimNotificationSlot({
+    tenantId,
     wishId,
     offerSource: top.offer.source,
     offerSourceId: top.offer.sourceId,
@@ -124,10 +127,12 @@ async function notifySellerForNewMatch(
     recipientId: sellerId,
     recipientType: "vendedor",
     templateName: "match_encontrado",
+    tenantId,
   });
 
   if (top.matchId) {
     await recordNotification({
+      tenantId,
       matchId: top.matchId,
       recipientId: sellerId,
       channel: "whatsapp",
@@ -162,7 +167,7 @@ export async function GET(req: NextRequest) {
     // Busca desejos ativos, não expirados, limitado a 50 por execução
     const { data: wishes, error } = await supabase
       .from("wishes")
-      .select("id, seller_id, brand, model, client_name, client_phone, expires_at")
+      .select("id, tenant_id, seller_id, brand, model, client_name, client_phone, expires_at")
       .in("status", ["procurando", "match_encontrado"])
       .gt("expires_at", now)
       .order("updated_at", { ascending: true })
@@ -197,7 +202,7 @@ export async function GET(req: NextRequest) {
           const seller = sellerPhoneMap.get(w.seller_id);
           if (seller?.active && seller.phone) {
             notified = await notifySellerForNewMatch(
-              w.seller_id, seller.phone, w.id, topNew, pool.length,
+              w.tenant_id, w.seller_id, seller.phone, w.id, topNew, pool.length,
               { name: w.client_name, phone: w.client_phone }
             );
           }

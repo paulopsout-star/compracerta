@@ -1,19 +1,30 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { supabase } from "@/lib/db";
 import { runMatchingForWish } from "@/lib/services/match-runner";
+import { getAdminScope } from "@/lib/tenant-scope";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
 export async function POST(_request: Request, ctx: RouteContext) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const role = (session.user as Record<string, unknown>).role as string;
-  if (role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) {
+    return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+  }
+  const { scope } = scopeRes;
 
   const { id } = await ctx.params;
   try {
+    const { data: wish } = await supabase
+      .from("wishes")
+      .select("id")
+      .eq("id", id)
+      .eq("tenant_id", scope.tenantId)
+      .maybeSingle();
+    if (!wish) {
+      return NextResponse.json({ error: "Desejo não encontrado" }, { status: 404 });
+    }
     const matches = await runMatchingForWish(id);
     return NextResponse.json({
       wishId: id,

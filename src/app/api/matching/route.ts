@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish } from "@/lib/services/avaliador-api";
+import { getRequestScope } from "@/lib/tenant-scope";
 import type { Wish, Offer } from "@/types";
 
 function dbWishToType(row: Record<string, unknown>): Wish {
@@ -57,24 +57,30 @@ function dbOfferToType(row: Record<string, unknown>): Offer {
 // POST /api/matching — Run matching engine
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const body = await request.json().catch(() => ({}));
     const wishId = body.wishId as string | undefined;
 
-    // Fetch active wishes
-    let wishQuery = supabase.from("wishes").select("*").eq("status", "procurando");
+    // Fetch active wishes do tenant
+    let wishQuery = supabase
+      .from("wishes")
+      .select("*")
+      .eq("tenant_id", scope.tenantId)
+      .eq("status", "procurando");
     if (wishId) wishQuery = wishQuery.eq("id", wishId);
     const { data: wishRows, error: wErr } = await wishQuery;
     if (wErr) throw wErr;
 
-    // Fetch active offers from Supabase
+    // Fetch active offers do tenant
     const { data: offerRows, error: oErr } = await supabase
       .from("offers")
       .select("*")
+      .eq("tenant_id", scope.tenantId)
       .eq("active", true);
     if (oErr) throw oErr;
 
@@ -101,6 +107,7 @@ export async function POST(request: NextRequest) {
             .from("offers")
             .upsert(
               {
+                tenant_id: scope.tenantId,
                 source: offer.source,
                 source_id: offer.sourceId,
                 plate: offer.plate ?? null,
@@ -136,6 +143,7 @@ export async function POST(request: NextRequest) {
         // Create match
         const status = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
         await insert("matches", {
+          tenant_id: scope.tenantId,
           wish_id: wish.id,
           offer_id: offerId,
           score: result.score,
@@ -162,6 +170,7 @@ export async function POST(request: NextRequest) {
 
           if (matchRow) {
             await insert("notifications", {
+              tenant_id: scope.tenantId,
               match_id: matchRow.id,
               recipient_id: wish.sellerId,
               channel: "sistema",
@@ -192,10 +201,11 @@ export async function POST(request: NextRequest) {
 // GET /api/matching — Get matches for current user
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const searchParams = request.nextUrl.searchParams;
     const wishId = searchParams.get("wishId");
@@ -204,16 +214,16 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("matches")
       .select("*, wishes!inner(*), offers!inner(*)")
+      .eq("tenant_id", scope.tenantId)
       .eq("offers.active", true)
       .order("score", { ascending: false });
 
     if (wishId) query = query.eq("wish_id", wishId);
     if (status) query = query.eq("status", status);
 
-    // Role-based filtering
-    const role = (session.user as Record<string, unknown>).role as string;
-    if (role === "vendedor") {
-      query = query.eq("wishes.seller_id", session.user.id);
+    // Role-based filtering (dentro do tenant)
+    if (scope.role === "vendedor") {
+      query = query.eq("wishes.seller_id", scope.userId);
     }
 
     const { data, error } = await query;

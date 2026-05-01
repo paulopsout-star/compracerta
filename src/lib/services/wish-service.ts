@@ -12,6 +12,9 @@ import { supabase } from "@/lib/db";
 import { getNumber, isEnabled } from "@/lib/feature-flags";
 
 export interface WishCreationInput {
+  /** Tenant onde o desejo deve ser gravado. Vem do contexto chamador
+   *  (proxy/host em rotas HTTP, ou identificação por phone em webhook). */
+  tenantId: string;
   sellerId: string;
   dealershipId?: string | null;
   clientName: string;
@@ -43,25 +46,25 @@ export interface WishCreationResult {
 /**
  * Rate check — retorna true se o vendedor já atingiu o limite diário.
  */
-export async function hasReachedDailyLimit(sellerId: string): Promise<boolean> {
-  const limit = await getNumber("wish.max_per_seller_per_day", 20);
+export async function hasReachedDailyLimit(sellerId: string, tenantId: string): Promise<boolean> {
+  const limit = await getNumber("wish.max_per_seller_per_day", 20, tenantId);
   const today = new Date().toISOString().slice(0, 10);
   const { data } = await supabase
     .from("wish_rate_counters")
     .select("count")
+    .eq("tenant_id", tenantId)
     .eq("seller_id", sellerId)
     .eq("date", today)
     .maybeSingle();
   return (data?.count ?? 0) >= limit;
 }
 
-async function bumpDailyCounter(sellerId: string): Promise<void> {
+async function bumpDailyCounter(sellerId: string, tenantId: string): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
-  // Upsert incrementando; como supabase-js não tem increment atômico em maybeSingle,
-  // fazemos select + update em duas etapas (ok para volumes iniciais).
   const { data } = await supabase
     .from("wish_rate_counters")
     .select("count")
+    .eq("tenant_id", tenantId)
     .eq("seller_id", sellerId)
     .eq("date", today)
     .maybeSingle();
@@ -69,10 +72,11 @@ async function bumpDailyCounter(sellerId: string): Promise<void> {
     await supabase
       .from("wish_rate_counters")
       .update({ count: (data.count ?? 0) + 1 })
+      .eq("tenant_id", tenantId)
       .eq("seller_id", sellerId)
       .eq("date", today);
   } else {
-    await supabase.from("wish_rate_counters").insert({ seller_id: sellerId, date: today, count: 1 });
+    await supabase.from("wish_rate_counters").insert({ tenant_id: tenantId, seller_id: sellerId, date: today, count: 1 });
   }
 }
 
@@ -80,13 +84,14 @@ async function bumpDailyCounter(sellerId: string): Promise<void> {
  * Detecção simples de duplicata: mesmo vendedor + mesma marca/modelo em status
  * ativo nos últimos 30 dias. Retorna wish existente se achar (ou null).
  */
-export async function findDuplicate(sellerId: string, brand: string, model: string): Promise<{ id: string; createdAt: Date } | null> {
-  if (!(await isEnabled("wish.duplicate_detection.enabled"))) return null;
+export async function findDuplicate(sellerId: string, brand: string, model: string, tenantId: string): Promise<{ id: string; createdAt: Date } | null> {
+  if (!(await isEnabled("wish.duplicate_detection.enabled", tenantId))) return null;
   const since = new Date();
   since.setDate(since.getDate() - 30);
   const { data } = await supabase
     .from("wishes")
     .select("id, created_at")
+    .eq("tenant_id", tenantId)
     .eq("seller_id", sellerId)
     .eq("brand", brand)
     .eq("model", model)
@@ -102,7 +107,7 @@ export async function findDuplicate(sellerId: string, brand: string, model: stri
  * Atualiza um desejo existente com os campos não-nulos do input. Usado quando
  * o vendedor escolhe "ATUALIZAR" no fluxo de duplicata detectada.
  */
-export async function updateWish(wishId: string, input: Partial<WishCreationInput>): Promise<void> {
+export async function updateWish(wishId: string, input: Partial<WishCreationInput>, tenantId?: string): Promise<void> {
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.clientName !== undefined)   update.client_name = input.clientName;
   if (input.clientPhone !== undefined)  update.client_phone = input.clientPhone;
@@ -133,7 +138,9 @@ export async function updateWish(wishId: string, input: Partial<WishCreationInpu
   }
   update.status = "procurando";
 
-  const { error } = await supabase.from("wishes").update(update).eq("id", wishId);
+  let q = supabase.from("wishes").update(update).eq("id", wishId);
+  if (tenantId) q = q.eq("tenant_id", tenantId);
+  const { error } = await q;
   if (error) throw error;
 }
 
@@ -145,6 +152,7 @@ export async function createWish(input: WishCreationInput): Promise<WishCreation
   const { data, error } = await supabase
     .from("wishes")
     .insert({
+      tenant_id: input.tenantId,
       seller_id: input.sellerId,
       dealership_id: input.dealershipId ?? null,
       client_name: input.clientName,
@@ -174,6 +182,6 @@ export async function createWish(input: WishCreationInput): Promise<WishCreation
     .single();
 
   if (error) throw error;
-  await bumpDailyCounter(input.sellerId);
+  await bumpDailyCounter(input.sellerId, input.tenantId);
   return { id: data.id as string };
 }

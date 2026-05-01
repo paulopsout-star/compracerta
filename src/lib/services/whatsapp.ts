@@ -23,6 +23,8 @@ export interface SendOptions {
   recipientId?: string;
   recipientType?: "vendedor" | "gestor" | "lojista" | "admin" | "cliente";
   templateName?: string;
+  /** Quando presente, lê config Z-API e flags do tenant especifico (override por tenant). */
+  tenantId?: string | null;
 }
 
 /**
@@ -114,25 +116,26 @@ async function sendViaMeta(phone: string, body: string): Promise<WhatsAppSendRes
  */
 export async function sendText(phone: string, body: string, opts?: SendOptions): Promise<WhatsAppSendResult> {
   const phoneE164 = toE164(phone);
+  const tenantId = opts?.tenantId ?? null;
 
-  const outboundEnabled = await isEnabled("whatsapp.outbound.enabled");
+  const outboundEnabled = await isEnabled("whatsapp.outbound.enabled", tenantId);
   if (!outboundEnabled) {
     const result: WhatsAppSendResult = { messageId: "", status: "skipped", provider: "zapi" };
     await logOutbound({ phoneE164, providerMessageId: "", status: "skipped", opts, payload: { body }, failureReason: "outbound_disabled" });
     return result;
   }
 
-  const shadow = await isEnabled("whatsapp.shadow_mode");
+  const shadow = await isEnabled("whatsapp.shadow_mode", tenantId);
   if (shadow) {
     const result: WhatsAppSendResult = { messageId: `shadow-${Date.now()}`, status: "skipped", provider: "shadow" };
     await logOutbound({ phoneE164, providerMessageId: result.messageId, status: "skipped", opts, payload: { body } });
     return result;
   }
 
-  const useZapi = await isEnabled("whatsapp.zapi.enabled");
+  const useZapi = await isEnabled("whatsapp.zapi.enabled", tenantId);
   let result: WhatsAppSendResult;
   if (useZapi) {
-    const r = await zapiSendText(phone, body);
+    const r = await zapiSendText(phone, body, tenantId);
     result = { messageId: r.messageId, status: r.status, provider: "zapi", error: r.error };
   } else {
     result = await sendViaMeta(phone, body);

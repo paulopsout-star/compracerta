@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/db";
+import { getAdminScope } from "@/lib/tenant-scope";
 
 export const runtime = "nodejs";
 
@@ -49,14 +49,11 @@ interface WishRow {
 }
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) {
+    return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
   }
-  const role = (session.user as Record<string, unknown>).role as string;
-  if (role !== "admin") {
-    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
-  }
+  const { scope } = scopeRes;
 
   try {
     const [statusCounts, wishesRes] = await Promise.all([
@@ -65,6 +62,7 @@ export async function GET() {
           const { count } = await supabase
             .from("wishes")
             .select("*", { count: "exact", head: true })
+            .eq("tenant_id", scope.tenantId)
             .eq("status", s);
           return { status: s, count: count ?? 0 } satisfies SummaryStatus;
         })
@@ -77,6 +75,7 @@ export async function GET() {
            dealership:dealerships!wishes_dealership_id_fkey(id, name, city, state),
            matches(id, score, status, created_at)`
         )
+        .eq("tenant_id", scope.tenantId)
         .order("created_at", { ascending: false })
         .limit(500),
     ]);

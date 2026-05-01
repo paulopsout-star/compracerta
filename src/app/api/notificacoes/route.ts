@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/db";
+import { getRequestScope } from "@/lib/tenant-scope";
 
 // GET /api/notificacoes — List notifications for current user
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const searchParams = request.nextUrl.searchParams;
     const status = searchParams.get("status");
@@ -19,7 +20,8 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("notifications")
       .select("*, matches(*, wishes(*), offers(*))", { count: "exact" })
-      .eq("recipient_id", session.user.id)
+      .eq("tenant_id", scope.tenantId)
+      .eq("recipient_id", scope.userId)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -41,10 +43,11 @@ export async function GET(request: NextRequest) {
 // PATCH /api/notificacoes — Mark notifications as read
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const body = await request.json();
     const ids = body.ids as string[];
@@ -57,7 +60,8 @@ export async function PATCH(request: NextRequest) {
       .from("notifications")
       .update({ status: "lido", read_at: new Date().toISOString() })
       .in("id", ids)
-      .eq("recipient_id", session.user.id);
+      .eq("tenant_id", scope.tenantId)
+      .eq("recipient_id", scope.userId);
 
     if (error) throw error;
 

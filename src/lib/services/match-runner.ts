@@ -93,10 +93,13 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
     return [];
   }
   const wish = rowToWish(wishRow as DbWishRow);
+  const tenantId = (wishRow as Record<string, unknown>).tenant_id as string | undefined;
 
-  // Ofertas locais + externas
+  // Ofertas locais + externas (locais filtradas por tenant do wish)
   const [localRes, external] = await Promise.all([
-    supabase.from("offers").select("*").eq("active", true),
+    tenantId
+      ? supabase.from("offers").select("*").eq("tenant_id", tenantId).eq("active", true)
+      : supabase.from("offers").select("*").eq("active", true),
     fetchExternalOffersForWish(wish).catch((err) => {
       console.warn("[match-runner] fetchExternalOffers falhou:", err instanceof Error ? err.message : err);
       return [] as Offer[];
@@ -124,17 +127,18 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
   // Cleanup de matches órfãos (ofertas que sumiram do Avaliador)
   try {
     const presentIds = buildPresentSourceIdsSet(external);
-    await cleanupStaleMatchesForWish(wish.id, presentIds);
+    await cleanupStaleMatchesForWish(wish.id, presentIds, tenantId);
   } catch (err) {
     console.warn("[match-runner] cleanup falhou:", err instanceof Error ? err.message : err);
   }
 
-  // Snapshot dos matches que já existem para este desejo — usado para marcar
-  // isNew (permite ao caller notificar apenas matches recém-descobertos).
-  const { data: existingRows } = await supabase
+  // Snapshot dos matches que já existem para este desejo
+  let existingQ = supabase
     .from("matches")
     .select("offer_id")
     .eq("wish_id", wish.id);
+  if (tenantId) existingQ = existingQ.eq("tenant_id", tenantId);
+  const { data: existingRows } = await existingQ;
   const existingOfferIds = new Set((existingRows ?? []).map((r) => r.offer_id as string));
 
   const all: Offer[] = [...localOffers, ...external];
@@ -147,42 +151,45 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
     // Persiste oferta externa (upsert) para ter FK válida no match
     let offerId = offer.id;
     if (offer.source !== "estoque_lojista") {
+      const offerPayload: Record<string, unknown> = {
+        source: offer.source,
+        source_id: offer.sourceId,
+        plate: offer.plate ?? null,
+        brand: offer.brand,
+        model: offer.model,
+        version: offer.version ?? null,
+        year: offer.year,
+        km: offer.km,
+        color: offer.color ?? null,
+        price: offer.price,
+        city: offer.city,
+        state: offer.state,
+        active: true,
+        external_status: offer.externalStatus ?? null,
+        external_seller_name: offer.externalSellerName ?? null,
+        external_dealership_name: offer.externalDealershipName ?? null,
+        synced_at: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : new Date().toISOString(),
+      };
+      if (tenantId) offerPayload.tenant_id = tenantId;
       const { data: upserted } = await supabase
         .from("offers")
-        .upsert(
-          {
-            source: offer.source,
-            source_id: offer.sourceId,
-            plate: offer.plate ?? null,
-            brand: offer.brand,
-            model: offer.model,
-            version: offer.version ?? null,
-            year: offer.year,
-            km: offer.km,
-            color: offer.color ?? null,
-            price: offer.price,
-            city: offer.city,
-            state: offer.state,
-            active: true,
-            external_status: offer.externalStatus ?? null,
-            external_seller_name: offer.externalSellerName ?? null,
-            external_dealership_name: offer.externalDealershipName ?? null,
-            synced_at: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : new Date().toISOString(),
-          },
-          { onConflict: "source,source_id" }
-        )
+        .upsert(offerPayload, { onConflict: "source,source_id" })
         .select("id")
         .single();
       if (upserted) offerId = upserted.id as string;
     }
 
     const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
+    const matchPayload: Record<string, unknown> = {
+      wish_id: wish.id,
+      offer_id: offerId,
+      score: result.score,
+      status: matchStatus,
+    };
+    if (tenantId) matchPayload.tenant_id = tenantId;
     const { data: matchRow } = await supabase
       .from("matches")
-      .upsert(
-        { wish_id: wish.id, offer_id: offerId, score: result.score, status: matchStatus },
-        { onConflict: "wish_id,offer_id" }
-      )
+      .upsert(matchPayload, { onConflict: "wish_id,offer_id" })
       .select("id")
       .single();
 

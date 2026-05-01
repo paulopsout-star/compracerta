@@ -47,15 +47,16 @@ export const ZAPI_FLAG_KEYS = {
 export const ZAPI_DEFAULT_BASE_URL = "https://api.z-api.io";
 
 /**
- * Carrega config Z-API. Precedência: feature_flags (admin/integracoes) > env > default.
- * Permite alterar a rota sem redeploy. Retorna null se faltar instance_id/token/client_token.
+ * Carrega config Z-API. Precedência: tenant_feature_flags(tenant_id) >
+ * feature_flags global > env > default. Permite alterar rota sem redeploy.
+ * Retorna null se faltar instance_id/token/client_token.
  */
-export async function getConfig(): Promise<ZapiConfig | null> {
+export async function getConfig(tenantId?: string | null): Promise<ZapiConfig | null> {
   const [flagBaseUrl, flagInstanceId, flagInstanceToken, flagClientToken] = await Promise.all([
-    getString(ZAPI_FLAG_KEYS.baseUrl, ""),
-    getString(ZAPI_FLAG_KEYS.instanceId, ""),
-    getString(ZAPI_FLAG_KEYS.instanceToken, ""),
-    getString(ZAPI_FLAG_KEYS.clientToken, ""),
+    getString(ZAPI_FLAG_KEYS.baseUrl, "", tenantId),
+    getString(ZAPI_FLAG_KEYS.instanceId, "", tenantId),
+    getString(ZAPI_FLAG_KEYS.instanceToken, "", tenantId),
+    getString(ZAPI_FLAG_KEYS.clientToken, "", tenantId),
   ]);
 
   const baseUrl = flagBaseUrl || process.env.ZAPI_BASE_URL || ZAPI_DEFAULT_BASE_URL;
@@ -119,8 +120,8 @@ function mockWarn(op: string): ZapiSendResult {
   return { messageId: `mock-${Date.now()}`, status: "sent" };
 }
 
-export async function sendText(phone: string, message: string): Promise<ZapiSendResult> {
-  const cfg = await getConfig();
+export async function sendText(phone: string, message: string, tenantId?: string | null): Promise<ZapiSendResult> {
+  const cfg = await getConfig(tenantId);
   if (!cfg) return mockWarn("sendText");
   try {
     const res = await post(

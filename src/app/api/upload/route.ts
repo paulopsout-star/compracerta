@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
 import { parseCSV, parseXLSX } from "@/lib/services/stock-parser";
+import { getRequestScope } from "@/lib/tenant-scope";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = [
@@ -14,10 +14,11 @@ const ALLOWED_TYPES = [
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -31,10 +32,11 @@ export async function POST(request: NextRequest) {
     }
 
     const ext = file.name.split(".").pop()?.toLowerCase();
-    const dealerStoreId = (session.user as Record<string, unknown>).dealerStoreId as string | null;
+    const dealerStoreId = scope.dealerStoreId;
 
     // Create upload record
     const upload = await insert("stock_uploads", {
+      tenant_id: scope.tenantId,
       dealer_store_id: dealerStoreId,
       file_url: file.name,
       format: ext === "csv" ? "csv" : ext === "pdf" ? "pdf" : "xlsx",
@@ -69,6 +71,7 @@ export async function POST(request: NextRequest) {
     for (const vehicle of result.vehicles) {
       try {
         await insert("offers", {
+          tenant_id: scope.tenantId,
           source: "estoque_lojista",
           source_id: `upload-${(upload as Record<string, unknown>).id}-${created}`,
           plate: vehicle.plate || null,
@@ -106,6 +109,7 @@ export async function POST(request: NextRequest) {
       const { data: newOffers } = await supabase
         .from("offers")
         .select("id")
+        .eq("tenant_id", scope.tenantId)
         .eq("dealer_store_id", dealerStoreId)
         .order("created_at", { ascending: false })
         .limit(created);

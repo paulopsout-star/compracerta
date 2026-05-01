@@ -15,12 +15,15 @@ import { supabase } from "@/lib/db";
  */
 export async function cleanupStaleMatchesForWish(
   wishId: string,
-  presentSourceIdsBySource: Map<string, Set<string>>
+  presentSourceIdsBySource: Map<string, Set<string>>,
+  tenantId?: string | null
 ): Promise<number> {
-  const { data: existingMatches } = await supabase
+  let q = supabase
     .from("matches")
     .select("id, offer_id, offers!inner(id, source, source_id)")
     .eq("wish_id", wishId);
+  if (tenantId) q = q.eq("tenant_id", tenantId);
+  const { data: existingMatches } = await q;
 
   if (!existingMatches) return 0;
 
@@ -39,6 +42,8 @@ export async function cleanupStaleMatchesForWish(
 
   if (staleOfferIds.length === 0) return 0;
 
-  await supabase.from("offers").update({ active: false }).in("id", staleOfferIds);
+  let upd = supabase.from("offers").update({ active: false }).in("id", staleOfferIds);
+  if (tenantId) upd = upd.eq("tenant_id", tenantId);
+  await upd;
   return staleOfferIds.length;
 }

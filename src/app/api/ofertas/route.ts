@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { supabase, insert } from "@/lib/db";
+import { getRequestScope } from "@/lib/tenant-scope";
 
 // GET /api/ofertas — List offers
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const searchParams = request.nextUrl.searchParams;
     const source = searchParams.get("source");
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("offers")
       .select("*", { count: "exact" })
+      .eq("tenant_id", scope.tenantId)
       .eq("active", true)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -29,11 +31,9 @@ export async function GET(request: NextRequest) {
     if (brand) query = query.ilike("brand", `%${brand}%`);
     if (model) query = query.ilike("model", `%${model}%`);
 
-    // Lojistas see only their own stock
-    const role = (session.user as Record<string, unknown>).role as string;
-    if (role === "lojista") {
-      const dealerStoreId = (session.user as Record<string, unknown>).dealerStoreId;
-      if (dealerStoreId) query = query.eq("dealer_store_id", dealerStoreId);
+    // Lojistas see only their own stock (dentro do tenant)
+    if (scope.role === "lojista" && scope.dealerStoreId) {
+      query = query.eq("dealer_store_id", scope.dealerStoreId);
     }
 
     const { data, error, count } = await query;
@@ -57,14 +57,16 @@ export async function GET(request: NextRequest) {
 // POST /api/ofertas — Create offer (from stock upload or manual)
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
 
     const body = await request.json();
 
     const offer = await insert("offers", {
+      tenant_id: scope.tenantId,
       source: body.source ?? "estoque_lojista",
       source_id: body.sourceId ?? `manual-${Date.now()}`,
       plate: body.plate || null,
@@ -77,7 +79,7 @@ export async function POST(request: NextRequest) {
       price: body.price,
       city: body.city,
       state: body.state,
-      dealer_store_id: (session.user as Record<string, unknown>).dealerStoreId ?? null,
+      dealer_store_id: scope.dealerStoreId ?? null,
     });
 
     return NextResponse.json({ message: "Oferta criada", offer }, { status: 201 });

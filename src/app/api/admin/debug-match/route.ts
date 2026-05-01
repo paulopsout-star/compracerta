@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { fetchAvaliadorOffersForWish } from "@/lib/services/avaliador-api";
 import { calculateMatchScore } from "@/lib/services/matching";
+import { getAdminScope } from "@/lib/tenant-scope";
 import type { Wish, Offer } from "@/types";
 
 /**
@@ -89,10 +89,8 @@ async function runDebug(body: Record<string, unknown>) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const role = (session.user as Record<string, unknown>).role as string;
-  if (role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
 
   const body = await request.json().catch(() => ({}));
   const result = await runDebug(body);
@@ -100,10 +98,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const role = (session.user as Record<string, unknown>).role as string;
-  if (role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
 
   const sp = request.nextUrl.searchParams;
   const body: Record<string, unknown> = {

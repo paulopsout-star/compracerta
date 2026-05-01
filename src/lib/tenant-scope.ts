@@ -14,6 +14,10 @@ export interface ScopeContext {
   role: string;
   /** ID do usuário autenticado. */
   userId: string;
+  /** Concessionária do usuário (gestor/vendedor). Pode ser null. */
+  dealershipId: string | null;
+  /** Loja do usuário (lojista). Pode ser null. */
+  dealerStoreId: string | null;
   /** Se o caller é superadmin (pode atravessar tenants). */
   isSuperadmin: boolean;
 }
@@ -44,6 +48,8 @@ export async function getRequestScope(
 
   const role = (session.user.role as string) ?? "vendedor";
   const userTenantId = (session.user.tenantId as string | null | undefined) ?? null;
+  const dealershipId = (session.user.dealershipId as string | null | undefined) ?? null;
+  const dealerStoreId = (session.user.dealerStoreId as string | null | undefined) ?? null;
   const isSuperadmin = role === "superadmin";
 
   if (!isSuperadmin && userTenantId && userTenantId !== tenant.id) {
@@ -62,6 +68,8 @@ export async function getRequestScope(
       userTenantId,
       role,
       userId: session.user.id,
+      dealershipId,
+      dealerStoreId,
       isSuperadmin,
     },
   };
@@ -77,4 +85,20 @@ export function withTenant<Q extends { eq: (col: string, val: unknown) => Q }>(
   tenantId: string
 ): Q {
   return query.eq("tenant_id", tenantId);
+}
+
+/**
+ * Versão para rotas /api/admin/* — exige role admin ou superadmin.
+ * Mantém scope.tenantId apontando para o tenant do host (admin não cruza).
+ * Superadmin pode passar targetTenantId via opcional pra cruzar.
+ */
+export async function getAdminScope(
+  options?: { targetTenantId?: string | null }
+): Promise<ScopeResult> {
+  const result = await getRequestScope(options);
+  if (!result.ok) return result;
+  if (result.scope.role !== "admin" && result.scope.role !== "superadmin") {
+    return { ok: false, status: 403, reason: "admin_required" };
+  }
+  return result;
 }

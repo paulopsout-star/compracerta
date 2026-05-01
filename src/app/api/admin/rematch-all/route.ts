@@ -1,27 +1,28 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish, buildPresentSourceIdsSet } from "@/lib/services/avaliador-api";
 import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
+import { getAdminScope } from "@/lib/tenant-scope";
 import type { Wish, Offer } from "@/types";
 
 /**
- * Admin utility — re-executes matching for ALL active wishes.
- * Useful after matching rules change (e.g. including new statuses).
- * Requires admin role.
+ * Admin utility — re-executes matching for ALL active wishes do tenant atual.
+ * Útil após regras de matching mudarem.
  */
 
 export async function POST() {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const role = (session.user as Record<string, unknown>).role as string;
-  if (role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) {
+    return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+  }
+  const { scope } = scopeRes;
 
-  // Load active wishes
+  // Load active wishes do tenant
   const { data: wishRows, error } = await supabase
     .from("wishes")
     .select("*")
+    .eq("tenant_id", scope.tenantId)
     .in("status", ["procurando", "match_encontrado"]);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -61,8 +62,8 @@ export async function POST() {
 
       // Cleanup: remove matches antigos que apontam para offers que sumiram da API
       const presentIdsBySource = buildPresentSourceIdsSet(external);
-      await cleanupStaleMatchesForWish(wish.id, presentIdsBySource);
-      const { data: localOffers } = await supabase.from("offers").select("*").eq("active", true);
+      await cleanupStaleMatchesForWish(wish.id, presentIdsBySource, scope.tenantId);
+      const { data: localOffers } = await supabase.from("offers").select("*").eq("tenant_id", scope.tenantId).eq("active", true);
 
       const allOffers: Offer[] = [
         ...((localOffers ?? []).map((r: Record<string, unknown>): Offer => ({
@@ -93,6 +94,7 @@ export async function POST() {
         let offerId = offer.id;
         if (offer.source !== "estoque_lojista") {
           const { data: upserted } = await supabase.from("offers").upsert({
+            tenant_id: scope.tenantId,
             source: offer.source,
             source_id: offer.sourceId,
             plate: offer.plate ?? null,
@@ -116,7 +118,7 @@ export async function POST() {
 
         const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
         await supabase.from("matches").upsert(
-          { wish_id: wish.id, offer_id: offerId, score: result.score, status: matchStatus },
+          { tenant_id: scope.tenantId, wish_id: wish.id, offer_id: offerId, score: result.score, status: matchStatus },
           { onConflict: "wish_id,offer_id" }
         );
         matchCount++;

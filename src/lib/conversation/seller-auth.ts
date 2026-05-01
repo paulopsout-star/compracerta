@@ -13,15 +13,26 @@
 
 import { supabase } from "@/lib/db";
 import { isPhoneAuthorizedInAvaliador } from "@/lib/services/avaliador-api";
+import { DEFAULT_TENANT_SLUG } from "@/lib/tenant";
 
 export interface AuthenticatedUser {
   id: string;
   name: string;
-  role: "vendedor" | "gestor" | "lojista" | "admin";
+  role: "vendedor" | "gestor" | "lojista" | "admin" | "superadmin";
   active: boolean;
   phone: string | null;
+  tenantId: string;
   dealershipId: string | null;
   dealerStoreId: string | null;
+}
+
+async function resolveDefaultTenantId(): Promise<string | null> {
+  const { data } = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("slug", DEFAULT_TENANT_SLUG)
+    .maybeSingle();
+  return (data?.id as string | undefined) ?? null;
 }
 
 export type IdentifyResult =
@@ -70,6 +81,7 @@ async function getDealerships(userId: string, dealershipId: string | null): Prom
  */
 async function autoCreateVendedorFromAvaliador(
   phoneE164: string,
+  tenantId: string,
   displayName?: string
 ): Promise<Record<string, unknown> | null> {
   const digits = phoneE164.replace(/\D/g, "");
@@ -77,14 +89,14 @@ async function autoCreateVendedorFromAvaliador(
   const placeholderEmail = `whatsapp+${noDdi}@compracerta.local`;
   const name = (displayName?.trim() || `Vendedor ${noDdi.slice(0, 2)}-${noDdi.slice(-4)}`).slice(0, 120);
 
-  // Idempotência: se o email placeholder já existe (tentativa anterior), reaproveita
+  // Idempotência: por (tenant, email) — emails iguais entre tenants são possíveis.
   const { data: existing } = await supabase
     .from("users")
-    .select("id, name, role, active, phone, dealership_id, dealer_store_id")
+    .select("id, name, role, active, phone, tenant_id, dealership_id, dealer_store_id")
+    .eq("tenant_id", tenantId)
     .eq("email", placeholderEmail)
     .maybeSingle();
   if (existing) {
-    // Atualiza phone caso esteja em formato diferente (raro)
     if (existing.phone !== phoneE164) {
       await supabase.from("users").update({ phone: phoneE164 }).eq("id", existing.id as string);
     }
@@ -94,24 +106,28 @@ async function autoCreateVendedorFromAvaliador(
   const { data: created, error } = await supabase
     .from("users")
     .insert({
+      tenant_id: tenantId,
       name,
       email: placeholderEmail,
       phone: phoneE164,
       role: "vendedor",
       active: true,
     })
-    .select("id, name, role, active, phone, dealership_id, dealer_store_id")
+    .select("id, name, role, active, phone, tenant_id, dealership_id, dealer_store_id")
     .single();
 
   if (error) {
     console.error("[seller-auth] auto-create falhou:", error.message);
     return null;
   }
-  console.log("[seller-auth] vendedor auto-criado via Avaliador:", { id: created.id, phone: phoneE164 });
+  console.log("[seller-auth] vendedor auto-criado via Avaliador:", { id: created.id, phone: phoneE164, tenantId });
   return created;
 }
 
-export async function identifySender(phoneE164: string, opts?: { displayName?: string }): Promise<IdentifyResult> {
+export async function identifySender(
+  phoneE164: string,
+  opts?: { displayName?: string; tenantId?: string }
+): Promise<IdentifyResult> {
   const candidates = phoneCandidates(phoneE164);
   const inboundDigits = phoneE164.replace(/\D/g, "");
   const inboundNoDdi = inboundDigits.startsWith("55") ? inboundDigits.slice(2) : inboundDigits;
@@ -119,11 +135,12 @@ export async function identifySender(phoneE164: string, opts?: { displayName?: s
   // 1) Match direto (rápido, usa index em phone) via candidatos comuns
   let userRow: Record<string, unknown> | null = null;
   for (const p of candidates) {
-    const { data } = await supabase
+    let q = supabase
       .from("users")
-      .select("id, name, role, active, phone, dealership_id, dealer_store_id")
-      .eq("phone", p)
-      .maybeSingle();
+      .select("id, name, role, active, phone, tenant_id, dealership_id, dealer_store_id")
+      .eq("phone", p);
+    if (opts?.tenantId) q = q.eq("tenant_id", opts.tenantId);
+    const { data } = await q.maybeSingle();
     if (data) {
       userRow = data;
       break;
@@ -132,10 +149,12 @@ export async function identifySender(phoneE164: string, opts?: { displayName?: s
 
   // 2) Fallback robusto: compara por dígitos apenas (cobre qualquer formato)
   if (!userRow) {
-    const { data: allActive } = await supabase
+    let q = supabase
       .from("users")
-      .select("id, name, role, active, phone, dealership_id, dealer_store_id")
+      .select("id, name, role, active, phone, tenant_id, dealership_id, dealer_store_id")
       .not("phone", "is", null);
+    if (opts?.tenantId) q = q.eq("tenant_id", opts.tenantId);
+    const { data: allActive } = await q;
     for (const u of (allActive ?? []) as Array<Record<string, unknown>>) {
       const storedDigits = ((u.phone as string | null) ?? "").replace(/\D/g, "");
       if (!storedDigits) continue;
@@ -147,11 +166,18 @@ export async function identifySender(phoneE164: string, opts?: { displayName?: s
     }
   }
 
-  // 3) Não achou no DB → consulta Avaliador Digital. Se autorizar, auto-cria.
+  // 3) Não achou no DB → consulta Avaliador Digital. Se autorizar, auto-cria
+  // dentro do tenant fornecido (default tenant em fallback até PR2.3 popular
+  // tenant_whatsapp_numbers).
   if (!userRow) {
     const authorized = await isPhoneAuthorizedInAvaliador(phoneE164);
     if (authorized) {
-      userRow = await autoCreateVendedorFromAvaliador(phoneE164, opts?.displayName);
+      const tenantId = opts?.tenantId ?? (await resolveDefaultTenantId());
+      if (!tenantId) {
+        console.error("[seller-auth] sem tenantId para auto-create — abortando");
+        return { kind: "unknown" };
+      }
+      userRow = await autoCreateVendedorFromAvaliador(phoneE164, tenantId, opts?.displayName);
     }
   }
 
@@ -163,6 +189,7 @@ export async function identifySender(phoneE164: string, opts?: { displayName?: s
     role: userRow.role as AuthenticatedUser["role"],
     active: userRow.active as boolean,
     phone: (userRow.phone as string | null) ?? null,
+    tenantId: userRow.tenant_id as string,
     dealershipId: (userRow.dealership_id as string | null) ?? null,
     dealerStoreId: (userRow.dealer_store_id as string | null) ?? null,
   };

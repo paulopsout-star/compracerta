@@ -197,8 +197,10 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
     // Vendedor sem role definido cai em boas-vindas (nem todo usuário do sistema
     // é vendedor — gestor/lojista/admin também podem mandar mensagem).
     if (user.role !== "vendedor") {
+      const recipientType = user.role === "superadmin" ? "admin" : user.role;
       await sendText(env.phoneRaw, renderTemplate("boas_vindas", { vendedor_nome: user.name }), {
-        recipientId: user.id, recipientType: user.role, templateName: "boas_vindas_non_seller",
+        recipientId: user.id, recipientType, templateName: "boas_vindas_non_seller",
+        tenantId: user.tenantId,
       });
       return { outcome: "processed" };
     }
@@ -210,6 +212,7 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
         role: user.role,
         active: user.active,
         phone: user.phone,
+        tenantId: user.tenantId,
         dealershipId: user.dealershipId,
         dealerStoreId: user.dealerStoreId,
       },

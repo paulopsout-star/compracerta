@@ -348,6 +348,7 @@ async function handleVerStatus(user: AuthenticatedUser, session: ConversationSes
 
 function draftToWishInput(user: AuthenticatedUser, draft: DraftWish) {
   return {
+    tenantId: user.tenantId,
     sellerId: user.id,
     dealershipId: user.dealershipId,
     clientName: draft.clienteNome!,
@@ -440,6 +441,7 @@ async function notifyMatch(
   // Claim atomico do slot de notificacao por (wish, identidade externa da oferta).
   // Sobrevive a recriacao de match_id (que era o problema do dedup antigo).
   const claim = await claimNotificationSlot({
+    tenantId: user.tenantId,
     wishId,
     offerSource: top.offer.source,
     offerSourceId: top.offer.sourceId,
@@ -483,10 +485,12 @@ async function notifyMatch(
     recipientId: user.id,
     recipientType: "vendedor",
     templateName: "match_encontrado",
+    tenantId: user.tenantId,
   });
 
   if (top.matchId) {
     await recordNotification({
+      tenantId: user.tenantId,
       matchId: top.matchId,
       recipientId: user.id,
       channel: "whatsapp",
@@ -582,7 +586,7 @@ export async function processTurn(input: TurnInput): Promise<void> {
       const cmd = text.trim().toLowerCase();
       if (/^(1|atualizar|update|atualiza)$/i.test(cmd)) {
         try {
-          await updateWish(pendingDupId, draftToWishInput(user, draft));
+          await updateWish(pendingDupId, draftToWishInput(user, draft), user.tenantId);
           await touchSession(session.id, { state: "idle", draftWish: null, currentIntent: null, context: null });
           await sendText(
             session.phoneE164,
@@ -600,7 +604,7 @@ export async function processTurn(input: TurnInput): Promise<void> {
       }
       if (/^(2|novo|new|criar|outro)$/i.test(cmd)) {
         try {
-          if (await hasReachedDailyLimit(user.id)) {
+          if (await hasReachedDailyLimit(user.id, user.tenantId)) {
             await sendText(session.phoneE164, renderTemplate("limite_diario", { limite: "20" }), {
               recipientId: user.id, recipientType: "vendedor", templateName: "limite_diario",
             });
@@ -634,13 +638,13 @@ export async function processTurn(input: TurnInput): Promise<void> {
 
     if (extraction.intent === "confirmar") {
       try {
-        if (await hasReachedDailyLimit(user.id)) {
+        if (await hasReachedDailyLimit(user.id, user.tenantId)) {
           await sendText(session.phoneE164, renderTemplate("limite_diario", { limite: "20" }), {
             recipientId: user.id, recipientType: "vendedor", templateName: "limite_diario",
           });
           return;
         }
-        const dup = await findDuplicate(user.id, draft.marca!, draft.modelo!);
+        const dup = await findDuplicate(user.id, draft.marca!, draft.modelo!, user.tenantId);
         if (dup) {
           const dias = Math.floor((Date.now() - dup.createdAt.getTime()) / 86_400_000);
           await sendText(

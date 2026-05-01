@@ -12,6 +12,7 @@ import { supabase } from "@/lib/db";
 export type NotificationChannel = "whatsapp" | "email" | "sistema";
 
 export interface ClaimSlotInput {
+  tenantId: string;
   wishId: string;
   offerSource: string;
   offerSourceId: string;
@@ -40,6 +41,7 @@ export async function claimNotificationSlot(
     .from("notification_dedup")
     .upsert(
       {
+        tenant_id: input.tenantId,
         wish_id: input.wishId,
         offer_source: input.offerSource,
         offer_source_id: input.offerSourceId,
@@ -88,6 +90,7 @@ export async function hasBeenNotified(
 }
 
 export interface RecordNotificationInput {
+  tenantId: string;
   matchId: string;
   recipientId: string;
   channel?: NotificationChannel;
@@ -107,6 +110,7 @@ export async function recordNotification(input: RecordNotificationInput): Promis
     const { data, error } = await supabase
       .from("notifications")
       .insert({
+        tenant_id: input.tenantId,
         match_id: input.matchId,
         recipient_id: input.recipientId,
         channel: input.channel ?? "whatsapp",

@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { checkAvaliadorHealth } from "@/lib/services/avaliador-api";
+import { getAdminScope } from "@/lib/tenant-scope";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const role = (session.user as Record<string, unknown>).role as string;
-  if (role !== "admin") return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  const scopeRes = await getAdminScope();
+  if (!scopeRes.ok) {
+    return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
+  }
 
   const avaliador = await checkAvaliadorHealth();
 

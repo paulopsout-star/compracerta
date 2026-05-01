@@ -1,26 +1,23 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/db";
+import { getRequestScope } from "@/lib/tenant-scope";
 
-// GET /api/dashboard — Stats for the current user's dashboard
+// GET /api/dashboard — Stats for the current user's dashboard, scoped to tenant.
 export async function GET() {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const scopeRes = await getRequestScope();
+    if (!scopeRes.ok) {
+      return NextResponse.json({ error: scopeRes.reason }, { status: scopeRes.status });
     }
+    const { scope } = scopeRes;
+    const tenantId = scope.tenantId;
 
-    const role = (session.user as Record<string, unknown>).role as string;
-    const userId = session.user.id;
-    const dealershipId = (session.user as Record<string, unknown>).dealershipId as string | null;
-    const dealerStoreId = (session.user as Record<string, unknown>).dealerStoreId as string | null;
-
-    if (role === "vendedor") {
+    if (scope.role === "vendedor") {
       const [wishes, activeWishes, matches, converted] = await Promise.all([
-        supabase.from("wishes").select("*", { count: "exact", head: true }).eq("seller_id", userId),
-        supabase.from("wishes").select("*", { count: "exact", head: true }).eq("seller_id", userId).eq("status", "procurando"),
-        supabase.from("matches").select("*, wishes!inner(*)").eq("wishes.seller_id", userId),
-        supabase.from("wishes").select("*", { count: "exact", head: true }).eq("seller_id", userId).eq("status", "convertido"),
+        supabase.from("wishes").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("seller_id", scope.userId),
+        supabase.from("wishes").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("seller_id", scope.userId).eq("status", "procurando"),
+        supabase.from("matches").select("*, wishes!inner(*)").eq("tenant_id", tenantId).eq("wishes.seller_id", scope.userId),
+        supabase.from("wishes").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("seller_id", scope.userId).eq("status", "convertido"),
       ]);
 
       const totalWishes = wishes.count ?? 0;
@@ -31,16 +28,16 @@ export async function GET() {
         activeWishes: activeWishes.count ?? 0,
         totalMatches: matches.data?.length ?? 0,
         conversionRate: totalWishes > 0 ? Math.round((totalConverted / totalWishes) * 1000) / 10 : 0,
-        recentWishes: (await supabase.from("wishes").select("*").eq("seller_id", userId).order("created_at", { ascending: false }).limit(10)).data ?? [],
+        recentWishes: (await supabase.from("wishes").select("*").eq("tenant_id", tenantId).eq("seller_id", scope.userId).order("created_at", { ascending: false }).limit(10)).data ?? [],
         recentMatches: matches.data?.slice(0, 5) ?? [],
       });
     }
 
-    if (role === "gestor" && dealershipId) {
+    if (scope.role === "gestor" && scope.dealershipId) {
       const [wishes, matches, sellers] = await Promise.all([
-        supabase.from("wishes").select("*", { count: "exact" }).eq("dealership_id", dealershipId),
-        supabase.from("matches").select("*, wishes!inner(*)").eq("wishes.dealership_id", dealershipId),
-        supabase.from("users").select("*").eq("dealership_id", dealershipId).eq("role", "vendedor"),
+        supabase.from("wishes").select("*", { count: "exact" }).eq("tenant_id", tenantId).eq("dealership_id", scope.dealershipId),
+        supabase.from("matches").select("*, wishes!inner(*)").eq("tenant_id", tenantId).eq("wishes.dealership_id", scope.dealershipId),
+        supabase.from("users").select("*").eq("tenant_id", tenantId).eq("dealership_id", scope.dealershipId).eq("role", "vendedor"),
       ]);
 
       return NextResponse.json({
@@ -51,10 +48,10 @@ export async function GET() {
       });
     }
 
-    if (role === "lojista" && dealerStoreId) {
+    if (scope.role === "lojista" && scope.dealerStoreId) {
       const [offers, matches] = await Promise.all([
-        supabase.from("offers").select("*", { count: "exact" }).eq("dealer_store_id", dealerStoreId).eq("active", true),
-        supabase.from("matches").select("*, offers!inner(*)").eq("offers.dealer_store_id", dealerStoreId),
+        supabase.from("offers").select("*", { count: "exact" }).eq("tenant_id", tenantId).eq("dealer_store_id", scope.dealerStoreId).eq("active", true),
+        supabase.from("matches").select("*, offers!inner(*)").eq("tenant_id", tenantId).eq("offers.dealer_store_id", scope.dealerStoreId),
       ]);
 
       return NextResponse.json({
@@ -65,13 +62,14 @@ export async function GET() {
       });
     }
 
-    if (role === "admin") {
+    // admin / superadmin: agrega dentro do tenant resolvido
+    if (scope.role === "admin" || scope.role === "superadmin") {
       const [users, wishes, offers, matches, notifications] = await Promise.all([
-        supabase.from("users").select("*", { count: "exact", head: true }).eq("active", true),
-        supabase.from("wishes").select("*", { count: "exact", head: true }),
-        supabase.from("offers").select("*", { count: "exact", head: true }).eq("active", true),
-        supabase.from("matches").select("*", { count: "exact", head: true }),
-        supabase.from("notifications").select("*", { count: "exact", head: true }),
+        supabase.from("users").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("active", true),
+        supabase.from("wishes").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        supabase.from("offers").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("active", true),
+        supabase.from("matches").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId),
+        supabase.from("notifications").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId),
       ]);
 
       return NextResponse.json({

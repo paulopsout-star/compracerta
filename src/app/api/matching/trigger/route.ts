@@ -11,7 +11,9 @@ function toOffer(r: Record<string, unknown>): Offer {
   return { id: r.id as string, source: r.source as Offer["source"], sourceId: r.source_id as string, plate: r.plate as string | undefined, brand: r.brand as string, model: r.model as string, version: r.version as string | undefined, year: r.year as number, km: r.km as number, color: r.color as string | undefined, price: r.price as number, city: r.city as string, state: r.state as string, active: r.active as boolean, syncedAt: new Date(r.synced_at as string) };
 }
 
-// POST /api/matching/trigger — Run matching for a specific wish or offer
+// POST /api/matching/trigger — Run matching for a specific wish or offer.
+// Endpoint interno chamado por /api/upload e /api/desejos. Não autentica via
+// session — deriva tenant_id pelo wish/offer referenciado e escopa tudo nele.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -20,18 +22,27 @@ export async function POST(request: NextRequest) {
 
     let wishes: Wish[] = [];
     let offers: Offer[] = [];
+    let tenantId: string | null = null;
 
     if (wishId) {
       const { data } = await supabase.from("wishes").select("*").eq("id", wishId).eq("status", "procurando");
       wishes = (data ?? []).map(toWish);
-      const { data: allOffers } = await supabase.from("offers").select("*").eq("active", true);
+      tenantId = ((data?.[0] as Record<string, unknown> | undefined)?.tenant_id as string | undefined) ?? null;
+      if (!tenantId) {
+        return NextResponse.json({ error: "wish sem tenant_id" }, { status: 400 });
+      }
+      const { data: allOffers } = await supabase.from("offers").select("*").eq("tenant_id", tenantId).eq("active", true);
       const localOffers = (allOffers ?? []).map(toOffer);
       const external = wishes[0] ? await fetchExternalOffersForWish(wishes[0]) : [];
       offers = [...localOffers, ...external];
     } else if (offerId) {
       const { data } = await supabase.from("offers").select("*").eq("id", offerId).eq("active", true);
       offers = (data ?? []).map(toOffer);
-      const { data: allWishes } = await supabase.from("wishes").select("*").eq("status", "procurando");
+      tenantId = ((data?.[0] as Record<string, unknown> | undefined)?.tenant_id as string | undefined) ?? null;
+      if (!tenantId) {
+        return NextResponse.json({ error: "offer sem tenant_id" }, { status: 400 });
+      }
+      const { data: allWishes } = await supabase.from("wishes").select("*").eq("tenant_id", tenantId).eq("status", "procurando");
       wishes = (allWishes ?? []).map(toWish);
     } else {
       return NextResponse.json({ error: "wishId or offerId required" }, { status: 400 });
@@ -47,7 +58,7 @@ export async function POST(request: NextRequest) {
         if (existing) continue;
 
         const status = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
-        const { data: matchRow } = await supabase.from("matches").insert({ wish_id: wish.id, offer_id: offer.id, score: result.score, status }).select("id").single();
+        const { data: matchRow } = await supabase.from("matches").insert({ tenant_id: tenantId, wish_id: wish.id, offer_id: offer.id, score: result.score, status }).select("id").single();
 
         if (matchRow && wish.status === "procurando") {
           await supabase.from("wishes").update({ status: "match_encontrado", updated_at: new Date().toISOString() }).eq("id", wish.id);
@@ -55,6 +66,7 @@ export async function POST(request: NextRequest) {
 
         if (matchRow && result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY) {
           await insert("notifications", {
+            tenant_id: tenantId,
             match_id: matchRow.id,
             recipient_id: wish.sellerId,
             channel: "sistema",
