@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { useBrandingOrFallback } from "@/components/branding/branding-provider";
 import {
   Eye,
   EyeOff,
@@ -10,7 +11,6 @@ import {
   AlertCircle,
   Lock,
   Shield,
-  Car,
   X,
   Users,
   BarChart3,
@@ -105,6 +105,7 @@ function DemoModal({ open, onClose, onSelect }: { open: boolean; onClose: () => 
 /* ─── Main page ─── */
 export default function LoginPage() {
   const router = useRouter();
+  const branding = useBrandingOrFallback();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -153,22 +154,44 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[10px] bg-[#2563EB] flex items-center justify-center shadow-lg shadow-[#2563EB]/25">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C1.4 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h2" />
-              <circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" />
-            </svg>
-          </div>
+          {branding.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={branding.logoUrl}
+              alt={branding.appName}
+              className="w-10 h-10 rounded-[10px] object-cover shadow-lg shadow-[var(--primary)]/25"
+            />
+          ) : (
+            <div
+              className="w-10 h-10 rounded-[10px] flex items-center justify-center shadow-lg"
+              style={{ backgroundColor: "var(--primary)", boxShadow: `0 8px 24px var(--primary)25` }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C1.4 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h2" />
+                <circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" />
+              </svg>
+            </div>
+          )}
           <div>
-            <span className="text-[15px] font-bold text-white">Compra Certa</span>
-            <span className="text-[11px] text-white/30 ml-2">by Canal do Repasse</span>
+            <span className="text-[15px] font-bold text-white">{branding.appName}</span>
+            {branding.tagline && (
+              <span className="text-[11px] text-white/30 ml-2">{branding.tagline}</span>
+            )}
           </div>
         </div>
 
         {/* Headline — clean, centered vertically */}
         <div className="relative z-10 flex-1 flex flex-col justify-center max-w-[520px]">
-          <GlitchText text="COMPRA" className="text-[clamp(48px,8vw,80px)] font-black leading-[0.9] tracking-[-2px]" />
-          <GlitchText text="CERTA" className="text-[clamp(48px,8vw,80px)] font-black leading-[0.9] tracking-[-2px]" />
+          {(() => {
+            const words = branding.appName.toUpperCase().split(/\s+/).slice(0, 2);
+            return words.map((word, i) => (
+              <GlitchText
+                key={`${word}-${i}`}
+                text={word}
+                className="text-[clamp(48px,8vw,80px)] font-black leading-[0.9] tracking-[-2px]"
+              />
+            ));
+          })()}
 
           <p className="text-[clamp(15px,1.3vw,18px)] text-white/60 mt-6 leading-relaxed max-w-[420px]">
             O match definitivo entre demanda e estoque na maior rede B2B automotiva do Brasil.
@@ -249,7 +272,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-[52px] rounded-[12px] bg-[#2563EB] text-white text-[16px] font-semibold hover:bg-[#1D4ED8] active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(37,99,235,0.3)] hover:shadow-[0_8px_24px_rgba(37,99,235,0.35)]"
+              className="w-full h-[52px] rounded-[12px] bg-[var(--primary)] text-white text-[16px] font-semibold hover:brightness-90 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
             >
               {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar"}
             </button>
