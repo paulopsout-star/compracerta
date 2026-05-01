@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { TENANT_HEADERS, normalizeHost, resolveTenantByHost } from "@/lib/tenant";
 
 const PUBLIC_PATHS = ["/", "/login", "/api/auth", "/api/webhooks", "/api/cron"];
 
@@ -10,12 +11,29 @@ const ROLE_PATHS: Record<string, string[]> = {
   admin: ["/admin"],
 };
 
-export default auth((req) => {
+export const proxy = auth(async (req) => {
   const { pathname } = req.nextUrl;
+
+  // Resolve tenant pelo host antes de qualquer roteamento. Cache em memória
+  // (60s) limita custo. Falha cai no tenant default `compra-certa`.
+  const rawHost = req.headers.get("host") ?? req.nextUrl.host ?? "";
+  const host = normalizeHost(rawHost);
+  const tenant = await resolveTenantByHost(host);
+
+  const requestHeaders = new Headers(req.headers);
+  if (tenant) {
+    requestHeaders.set(TENANT_HEADERS.id, tenant.id);
+    requestHeaders.set(TENANT_HEADERS.slug, tenant.slug);
+    requestHeaders.set(TENANT_HEADERS.host, host);
+  }
+
+  function next() {
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
 
   // Allow public paths
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
-    return NextResponse.next();
+    return next();
   }
 
   // Allow static assets and API routes that don't need auth
@@ -24,7 +42,7 @@ export default auth((req) => {
     pathname.startsWith("/favicon") ||
     pathname.includes(".")
   ) {
-    return NextResponse.next();
+    return next();
   }
 
   const user = req.auth?.user;
@@ -53,7 +71,7 @@ export default auth((req) => {
     }
   }
 
-  return NextResponse.next();
+  return next();
 });
 
 export const config = {

@@ -11,6 +11,7 @@ declare module "next-auth" {
       name: string;
       email: string;
       role: UserRole;
+      tenantId?: string | null;
       dealershipId?: string | null;
       dealerStoreId?: string | null;
     };
@@ -49,6 +50,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.name,
           email: user.email,
           role: user.role,
+          tenantId: user.tenant_id ?? null,
           dealershipId: user.dealership_id,
           dealerStoreId: user.dealer_store_id,
         };
@@ -67,6 +69,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.id = user.id!;
         token.role = (user as Record<string, unknown>).role as string;
+        token.tenantId = (user as Record<string, unknown>).tenantId as string | null;
         token.dealershipId = (user as Record<string, unknown>).dealershipId as string | null;
         token.dealerStoreId = (user as Record<string, unknown>).dealerStoreId as string | null;
       }
@@ -75,6 +78,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       session.user.id = token.id as string;
       session.user.role = token.role as UserRole;
+      session.user.tenantId = token.tenantId as string | null;
       session.user.dealershipId = token.dealershipId as string | null;
       session.user.dealerStoreId = token.dealerStoreId as string | null;
       return session;
