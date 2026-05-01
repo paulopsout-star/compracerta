@@ -113,6 +113,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [demoOpen, setDemoOpen] = useState(false);
 
+  function homeForRole(role: string | undefined): string {
+    // superadmin compartilha UI com admin (decisão PR2.1)
+    if (role === "superadmin" || role === "admin") return "/admin";
+    if (role === "gestor" || role === "lojista" || role === "vendedor") return `/${role}`;
+    return "/vendedor";
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -121,7 +128,7 @@ export default function LoginPage() {
     if (result?.error) { setError("E-mail ou senha incorretos"); setLoading(false); return; }
     const res = await fetch("/api/auth/session");
     const session = await res.json();
-    router.push(`/${session?.user?.role ?? "vendedor"}`);
+    router.push(homeForRole(session?.user?.role));
     router.refresh();
   }
 
@@ -133,7 +140,7 @@ export default function LoginPage() {
     if (result?.error) { setError("Erro ao acessar demonstração"); setLoading(false); return; }
     const res = await fetch("/api/auth/session");
     const session = await res.json();
-    router.push(`/${session?.user?.role ?? "vendedor"}`);
+    router.push(homeForRole(session?.user?.role));
     router.refresh();
   }
 
