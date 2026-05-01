@@ -1,7 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface MetricHeroAction {
+  label: string;
+  onClick?: () => void;
+  href?: string;
+}
 
 interface MetricHeroProps {
   label: string;
@@ -9,8 +16,8 @@ interface MetricHeroProps {
   trend: { value: number; label: string };
   subtitle: string;
   sparklineData?: number[];
-  primaryAction?: { label: string; onClick?: () => void };
-  secondaryAction?: { label: string; onClick?: () => void };
+  primaryAction?: MetricHeroAction;
+  secondaryAction?: MetricHeroAction;
 }
 
 function Sparkline({ data, className }: { data: number[]; className?: string }) {
@@ -85,22 +92,38 @@ export function MetricHero({
       {/* Actions */}
       {(primaryAction || secondaryAction) && (
         <div className="flex items-center gap-2.5 mt-5 pt-5 border-t border-[#F3F4F6]">
-          {secondaryAction && (
-            <button
-              onClick={secondaryAction.onClick}
-              className="flex-1 h-[40px] rounded-[8px] bg-[#1A1D23] text-white text-[13px] font-medium hover:bg-[#2A2E35] active:scale-[0.98] transition-all"
-            >
-              {secondaryAction.label}
-            </button>
-          )}
-          {primaryAction && (
-            <button
-              onClick={primaryAction.onClick}
-              className="flex-1 h-[40px] rounded-[8px] bg-[var(--primary)] text-white text-[13px] font-medium hover:shadow-md hover:shadow-[var(--primary)]/20 active:scale-[0.98] transition-all"
-            >
-              {primaryAction.label}
-            </button>
-          )}
+          {secondaryAction &&
+            (secondaryAction.href ? (
+              <Link
+                href={secondaryAction.href}
+                className="flex-1 h-[40px] rounded-[8px] bg-[#1A1D23] text-white text-[13px] font-medium hover:bg-[#2A2E35] active:scale-[0.98] transition-all inline-flex items-center justify-center"
+              >
+                {secondaryAction.label}
+              </Link>
+            ) : (
+              <button
+                onClick={secondaryAction.onClick}
+                className="flex-1 h-[40px] rounded-[8px] bg-[#1A1D23] text-white text-[13px] font-medium hover:bg-[#2A2E35] active:scale-[0.98] transition-all"
+              >
+                {secondaryAction.label}
+              </button>
+            ))}
+          {primaryAction &&
+            (primaryAction.href ? (
+              <Link
+                href={primaryAction.href}
+                className="flex-1 h-[40px] rounded-[8px] bg-[var(--primary)] text-white text-[13px] font-medium hover:shadow-md hover:shadow-[var(--primary)]/20 active:scale-[0.98] transition-all inline-flex items-center justify-center"
+              >
+                {primaryAction.label}
+              </Link>
+            ) : (
+              <button
+                onClick={primaryAction.onClick}
+                className="flex-1 h-[40px] rounded-[8px] bg-[var(--primary)] text-white text-[13px] font-medium hover:shadow-md hover:shadow-[var(--primary)]/20 active:scale-[0.98] transition-all"
+              >
+                {primaryAction.label}
+              </button>
+            ))}
         </div>
       )}
     </div>

@@ -41,8 +41,7 @@ export default function AdminDashboard() {
                   trend={{ value: 0, label: `${data?.totalWishes ?? 0} desejos · ${data?.totalOffers ?? 0} ofertas` }}
                   subtitle={`${data?.totalMatches ?? 0} match${(data?.totalMatches ?? 0) === 1 ? "" : "es"} gerado${(data?.totalMatches ?? 0) === 1 ? "" : "s"} até agora`}
                   sparklineData={[0, 0, 0, 0, 0, data?.totalUsers ?? 0]}
-                  primaryAction={{ label: "Relatório Completo" }}
-                  secondaryAction={{ label: "Exportar" }}
+                  primaryAction={{ label: "Relatório Completo", href: "/gestor/relatorios" }}
                 />
                 <QuickActions
                   actions={[
