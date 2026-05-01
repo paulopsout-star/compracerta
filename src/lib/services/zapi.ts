@@ -10,6 +10,8 @@
  * Todas as chamadas enviam Client-Token no header.
  */
 
+import { getString } from "@/lib/feature-flags";
+
 export interface ZapiSendResult {
   messageId: string;
   status: "sent" | "failed";
@@ -28,18 +30,39 @@ export interface ZapiOption {
   description?: string;
 }
 
-interface ZapiConfig {
+export interface ZapiConfig {
   baseUrl: string;
   instanceId: string;
   instanceToken: string;
   clientToken: string;
 }
 
-function getConfig(): ZapiConfig | null {
-  const baseUrl = process.env.ZAPI_BASE_URL ?? "https://api.z-api.io";
-  const instanceId = process.env.ZAPI_INSTANCE_ID;
-  const instanceToken = process.env.ZAPI_INSTANCE_TOKEN;
-  const clientToken = process.env.ZAPI_CLIENT_TOKEN;
+export const ZAPI_FLAG_KEYS = {
+  baseUrl: "whatsapp.zapi.base_url",
+  instanceId: "whatsapp.zapi.instance_id",
+  instanceToken: "whatsapp.zapi.instance_token",
+  clientToken: "whatsapp.zapi.client_token",
+} as const;
+
+export const ZAPI_DEFAULT_BASE_URL = "https://api.z-api.io";
+
+/**
+ * Carrega config Z-API. Precedência: feature_flags (admin/integracoes) > env > default.
+ * Permite alterar a rota sem redeploy. Retorna null se faltar instance_id/token/client_token.
+ */
+export async function getConfig(): Promise<ZapiConfig | null> {
+  const [flagBaseUrl, flagInstanceId, flagInstanceToken, flagClientToken] = await Promise.all([
+    getString(ZAPI_FLAG_KEYS.baseUrl, ""),
+    getString(ZAPI_FLAG_KEYS.instanceId, ""),
+    getString(ZAPI_FLAG_KEYS.instanceToken, ""),
+    getString(ZAPI_FLAG_KEYS.clientToken, ""),
+  ]);
+
+  const baseUrl = flagBaseUrl || process.env.ZAPI_BASE_URL || ZAPI_DEFAULT_BASE_URL;
+  const instanceId = flagInstanceId || process.env.ZAPI_INSTANCE_ID || "";
+  const instanceToken = flagInstanceToken || process.env.ZAPI_INSTANCE_TOKEN || "";
+  const clientToken = flagClientToken || process.env.ZAPI_CLIENT_TOKEN || "";
+
   if (!instanceId || !instanceToken || !clientToken) return null;
   return { baseUrl, instanceId, instanceToken, clientToken };
 }
@@ -97,7 +120,7 @@ function mockWarn(op: string): ZapiSendResult {
 }
 
 export async function sendText(phone: string, message: string): Promise<ZapiSendResult> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   if (!cfg) return mockWarn("sendText");
   try {
     const res = await post(
@@ -117,7 +140,7 @@ export async function sendButtonList(
   message: string,
   buttons: ZapiButton[]
 ): Promise<ZapiSendResult> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   if (!cfg) return mockWarn("sendButtonList");
   try {
     const res = await post(
@@ -143,7 +166,7 @@ export async function sendOptionList(
   buttonLabel: string,
   options: ZapiOption[]
 ): Promise<ZapiSendResult> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   if (!cfg) return mockWarn("sendOptionList");
   try {
     const res = await post(
@@ -163,7 +186,7 @@ export async function sendOptionList(
 }
 
 export async function sendImage(phone: string, imageUrl: string, caption?: string): Promise<ZapiSendResult> {
-  const cfg = getConfig();
+  const cfg = await getConfig();
   if (!cfg) return mockWarn("sendImage");
   try {
     const res = await post(
@@ -178,6 +201,6 @@ export async function sendImage(phone: string, imageUrl: string, caption?: strin
   }
 }
 
-export function isZapiConfigured(): boolean {
-  return getConfig() !== null;
+export async function isZapiConfigured(): Promise<boolean> {
+  return (await getConfig()) !== null;
 }

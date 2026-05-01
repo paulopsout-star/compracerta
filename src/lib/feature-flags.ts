@@ -19,6 +19,10 @@ export const FEATURE_FLAG_DEFAULTS: Record<string, { enabled: boolean; value?: F
   "whatsapp.inbound.enabled":            { enabled: true,  description: "Recebimento de mensagens WhatsApp" },
   "whatsapp.outbound.enabled":           { enabled: true,  description: "Envio de mensagens WhatsApp" },
   "whatsapp.zapi.enabled":               { enabled: true,  description: "Usa Z-API como provedor (fallback: Meta Cloud)" },
+  "whatsapp.zapi.base_url":              { enabled: true,  value: "", description: "Z-API base URL (vazio usa env/default https://api.z-api.io)" },
+  "whatsapp.zapi.instance_id":           { enabled: true,  value: "", description: "Z-API instance ID (vazio usa env ZAPI_INSTANCE_ID)" },
+  "whatsapp.zapi.instance_token":        { enabled: true,  value: "", description: "Z-API instance token (vazio usa env ZAPI_INSTANCE_TOKEN)" },
+  "whatsapp.zapi.client_token":          { enabled: true,  value: "", description: "Z-API client token (vazio usa env ZAPI_CLIENT_TOKEN)" },
   "whatsapp.shadow_mode":                { enabled: false, description: "Processa sem enviar resposta (QA)" },
 
   // Conversação
