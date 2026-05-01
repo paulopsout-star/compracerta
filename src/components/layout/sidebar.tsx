@@ -51,6 +51,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   admin: [
     { label: "Painel", href: "/admin", icon: LayoutDashboard },
     { label: "Usuários", href: "/admin/usuarios", icon: Users },
+    { label: "Relatórios", href: "/admin/relatorios", icon: BarChart3 },
     { label: "Integrações", href: "/admin/integracoes", icon: Plug },
     { label: "Logs", href: "/admin/logs", icon: ScrollText },
     { label: "Parâmetros", href: "/admin/parametros", icon: Settings },
