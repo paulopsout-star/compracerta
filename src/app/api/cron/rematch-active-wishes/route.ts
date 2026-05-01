@@ -15,7 +15,7 @@ import { getNumber, isEnabled } from "@/lib/feature-flags";
 import { runMatchingForWish, type MatchSummary } from "@/lib/services/match-runner";
 import { sendText } from "@/lib/services/whatsapp";
 import { renderTemplate, formatPhoneBR } from "@/lib/whatsapp-templates";
-import { hasBeenNotified, recordNotification } from "@/lib/services/notification-log";
+import { claimNotificationSlot, recordNotification } from "@/lib/services/notification-log";
 import type { Offer } from "@/types";
 
 export const runtime = "nodejs";
@@ -79,7 +79,17 @@ async function notifySellerForNewMatch(
   totalMatches: number,
   clientInfo?: { name?: string; phone?: string }
 ): Promise<boolean> {
-  if (top.matchId && await hasBeenNotified(top.matchId, "whatsapp")) {
+  // Claim atomico via notification_dedup (chave estavel por identidade da oferta).
+  const claim = await claimNotificationSlot({
+    wishId,
+    offerSource: top.offer.source,
+    offerSourceId: top.offer.sourceId,
+    recipientId: sellerId,
+    channel: "whatsapp",
+    matchId: top.matchId || null,
+  });
+  if (!claim.claimed) {
+    console.log("[cron.notifySeller] slot ja reservado — skip:", claim.reason);
     return false;
   }
 

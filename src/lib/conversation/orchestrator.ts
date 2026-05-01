@@ -11,7 +11,7 @@ import { getNumber, isEnabled } from "@/lib/feature-flags";
 import { sendText } from "@/lib/services/whatsapp";
 import { createWish, findDuplicate, hasReachedDailyLimit, updateWish } from "@/lib/services/wish-service";
 import { runMatchingForWish, type MatchSummary } from "@/lib/services/match-runner";
-import { hasBeenNotified, recordNotification } from "@/lib/services/notification-log";
+import { claimNotificationSlot, recordNotification } from "@/lib/services/notification-log";
 import type { Offer } from "@/types";
 import { extract, type ExtractedFields, type ExtractionResult } from "@/lib/conversation/extractor";
 import { extractWithClaude } from "@/lib/services/llm";
@@ -437,8 +437,18 @@ async function notifyMatch(
   const minScore = await getNumber("match.min_score_threshold", 70);
   if (!top || top.score < minScore) return;
 
-  // Idempotência: se já notificamos este match via WhatsApp, não re-envia
-  if (top.matchId && await hasBeenNotified(top.matchId, "whatsapp")) {
+  // Claim atomico do slot de notificacao por (wish, identidade externa da oferta).
+  // Sobrevive a recriacao de match_id (que era o problema do dedup antigo).
+  const claim = await claimNotificationSlot({
+    wishId,
+    offerSource: top.offer.source,
+    offerSourceId: top.offer.sourceId,
+    recipientId: user.id,
+    channel: "whatsapp",
+    matchId: top.matchId || null,
+  });
+  if (!claim.claimed) {
+    console.log("[orchestrator.notifyMatch] slot ja reservado — skip:", claim.reason);
     return;
   }
 

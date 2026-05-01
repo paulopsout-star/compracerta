@@ -11,6 +11,62 @@ import { supabase } from "@/lib/db";
 
 export type NotificationChannel = "whatsapp" | "email" | "sistema";
 
+export interface ClaimSlotInput {
+  wishId: string;
+  offerSource: string;
+  offerSourceId: string;
+  recipientId: string;
+  channel?: NotificationChannel;
+  matchId?: string | null;
+}
+
+/**
+ * Reserva atomicamente o "slot" de notificacao desta oferta para este desejo.
+ * Tabela: notification_dedup, chaveada por (wish_id, offer_source, offer_source_id, channel).
+ *
+ * Padrao claim-then-send:
+ *   - Se inseriu (claimed=true): caller envia o WhatsApp.
+ *   - Se conflito (claimed=false, reason='duplicate'): outro run ja notificou.
+ *   - Se erro de DB (claimed=false, reason='db_error:...'): fail-closed.
+ *
+ * Idempotencia sobrevive a deletion+recreation de matches/offers, porque a
+ * chave eh a identidade externa estavel (source + source_id) da oferta.
+ */
+export async function claimNotificationSlot(
+  input: ClaimSlotInput
+): Promise<{ claimed: boolean; reason?: string }> {
+  const channel = input.channel ?? "whatsapp";
+  const { data, error } = await supabase
+    .from("notification_dedup")
+    .upsert(
+      {
+        wish_id: input.wishId,
+        offer_source: input.offerSource,
+        offer_source_id: input.offerSourceId,
+        channel,
+        recipient_id: input.recipientId,
+        match_id: input.matchId ?? null,
+      },
+      { onConflict: "wish_id,offer_source,offer_source_id,channel", ignoreDuplicates: true }
+    )
+    .select("id");
+
+  if (error) {
+    console.error("[notification-dedup] claim error (fail-closed):", {
+      code: error.code,
+      message: error.message,
+      wishId: input.wishId,
+      sourceId: input.offerSourceId,
+    });
+    return { claimed: false, reason: `db_error:${error.code ?? "unknown"}` };
+  }
+
+  if (!data || data.length === 0) {
+    return { claimed: false, reason: "duplicate" };
+  }
+  return { claimed: true };
+}
+
 /**
  * Retorna true se já existe registro bem-sucedido de notificação para o
  * match no canal indicado (status != 'erro').

@@ -211,6 +211,7 @@ model Wish {
   seller         User            @relation(fields: [sellerId], references: [id])
   dealership     Dealership?     @relation(fields: [dealershipId], references: [id])
   matches        Match[]
+  notificationDedups NotificationDedup[]
 
   @@index([status])
   @@index([brand, model])
@@ -289,6 +290,23 @@ model Notification {
   @@index([recipientId])
   @@index([matchId])
   @@map("notifications")
+}
+
+model NotificationDedup {
+  id              String   @id @default(uuid()) @db.Uuid
+  wishId          String
+  offerSource     String
+  offerSourceId   String
+  channel         String   @default("whatsapp")
+  recipientId    String
+  matchId         String?
+  firstNotifiedAt DateTime @default(now())
+
+  wish            Wish     @relation(fields: [wishId], references: [id], onDelete: Cascade)
+
+  @@unique([wishId, offerSource, offerSourceId, channel])
+  @@index([recipientId])
+  @@map("notification_dedup")
 }
 
 model StockUpload {
