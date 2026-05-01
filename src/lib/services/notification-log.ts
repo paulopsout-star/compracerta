@@ -8,12 +8,14 @@
  */
 
 import { supabase } from "@/lib/db";
+import { createHash } from "node:crypto";
 
 export type NotificationChannel = "whatsapp" | "email" | "sistema";
 
 export interface ClaimSlotInput {
   tenantId: string;
   wishId: string;
+  clientPhone: string;
   offerSource: string;
   offerSourceId: string;
   recipientId: string;
@@ -21,35 +23,60 @@ export interface ClaimSlotInput {
   matchId?: string | null;
 }
 
+function normalizeClientPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "unknown";
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
+function buildDedupKey(input: ClaimSlotInput, channel: NotificationChannel): string {
+  return createHash("sha256")
+    .update([
+      input.tenantId || "default",
+      input.recipientId,
+      normalizeClientPhone(input.clientPhone),
+      input.offerSource.toLowerCase(),
+      input.offerSourceId.toLowerCase(),
+      channel,
+    ].join("|"))
+    .digest("hex");
+}
+
 /**
- * Reserva atomicamente o "slot" de notificacao desta oferta para este desejo.
- * Tabela: notification_dedup, chaveada por (wish_id, offer_source, offer_source_id, channel).
+ * Reserva atomicamente o "slot" de notificacao desta oferta para este cliente.
+ * Tabela: notification_dedup, chaveada por dedup_key:
+ *   tenant + vendedor + telefone_cliente + fonte/id_oferta + canal.
  *
  * Padrao claim-then-send:
  *   - Se inseriu (claimed=true): caller envia o WhatsApp.
  *   - Se conflito (claimed=false, reason='duplicate'): outro run ja notificou.
  *   - Se erro de DB (claimed=false, reason='db_error:...'): fail-closed.
  *
- * Idempotencia sobrevive a deletion+recreation de matches/offers, porque a
- * chave eh a identidade externa estavel (source + source_id) da oferta.
+ * Idempotencia sobrevive a recreation de wish/match, porque nao depende de
+ * match_id e nao depende apenas de wish_id.
  */
 export async function claimNotificationSlot(
   input: ClaimSlotInput
 ): Promise<{ claimed: boolean; reason?: string }> {
   const channel = input.channel ?? "whatsapp";
+  const dedupKey = buildDedupKey(input, channel);
   const { data, error } = await supabase
     .from("notification_dedup")
     .upsert(
       {
         tenant_id: input.tenantId,
         wish_id: input.wishId,
+        client_phone: normalizeClientPhone(input.clientPhone),
+        dedup_key: dedupKey,
         offer_source: input.offerSource,
         offer_source_id: input.offerSourceId,
         channel,
         recipient_id: input.recipientId,
         match_id: input.matchId ?? null,
       },
-      { onConflict: "wish_id,offer_source,offer_source_id,channel", ignoreDuplicates: true }
+      { onConflict: "dedup_key", ignoreDuplicates: true }
     )
     .select("id");
 
@@ -59,6 +86,7 @@ export async function claimNotificationSlot(
       message: error.message,
       wishId: input.wishId,
       sourceId: input.offerSourceId,
+      dedupKey,
     });
     return { claimed: false, reason: `db_error:${error.code ?? "unknown"}` };
   }

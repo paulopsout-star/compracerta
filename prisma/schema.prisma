@@ -294,18 +294,22 @@ model Notification {
 
 model NotificationDedup {
   id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String?  @map("tenant_id")
   wishId          String
   offerSource     String
   offerSourceId   String
   channel         String   @default("whatsapp")
   recipientId    String
   matchId         String?
+  clientPhone     String?  @map("client_phone")
+  dedupKey        String?  @unique @map("dedup_key")
   firstNotifiedAt DateTime @default(now())
 
   wish            Wish     @relation(fields: [wishId], references: [id], onDelete: Cascade)
 
   @@unique([wishId, offerSource, offerSourceId, channel])
   @@index([recipientId])
+  @@index([tenantId, recipientId, clientPhone])
   @@map("notification_dedup")
 }
 

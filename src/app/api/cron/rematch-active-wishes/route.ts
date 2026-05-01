@@ -80,11 +80,12 @@ async function notifySellerForNewMatch(
   top: MatchSummary,
   totalMatches: number,
   clientInfo?: { name?: string; phone?: string }
-): Promise<boolean> {
+): Promise<"sent" | "duplicate" | "failed"> {
   // Claim atomico via notification_dedup (chave estavel por identidade da oferta).
   const claim = await claimNotificationSlot({
     tenantId,
     wishId,
+    clientPhone: clientInfo?.phone ?? "",
     offerSource: top.offer.source,
     offerSourceId: top.offer.sourceId,
     recipientId: sellerId,
@@ -93,7 +94,7 @@ async function notifySellerForNewMatch(
   });
   if (!claim.claimed) {
     console.log("[cron.notifySeller] slot ja reservado — skip:", claim.reason);
-    return false;
+    return "duplicate";
   }
 
   const { label: origemLabel, detalhes: origemDetalhes } = originLabel(top.offer);
@@ -141,7 +142,7 @@ async function notifySellerForNewMatch(
       status: result.status === "sent" ? "enviado" : result.status === "failed" ? "erro" : "pendente",
     });
   }
-  return result.status === "sent";
+  return result.status === "sent" ? "sent" : "failed";
 }
 
 export async function GET(req: NextRequest) {
@@ -157,6 +158,7 @@ export async function GET(req: NextRequest) {
     model: string;
     matches: number;
     newMatches: number;
+    skippedDuplicates: number;
     notified: boolean;
   }> = [];
 
@@ -201,13 +203,16 @@ export async function GET(req: NextRequest) {
         const topNew = newInPool.find((m) => m.score >= minScore);
 
         let notified = false;
+        let skippedDuplicates = 0;
         if (topNew && autoNotify) {
           const seller = sellerPhoneMap.get(w.seller_id);
           if (seller?.active && seller.phone) {
-            notified = await notifySellerForNewMatch(
+            const notifyResult = await notifySellerForNewMatch(
               w.tenant_id, w.seller_id, seller.phone, w.id, topNew, pool.length,
               { name: w.client_name, phone: w.client_phone }
             );
+            notified = notifyResult === "sent";
+            if (notifyResult === "duplicate") skippedDuplicates = 1;
           }
         }
 
@@ -217,6 +222,7 @@ export async function GET(req: NextRequest) {
           model: w.model,
           matches: matches.length,
           newMatches: newInPool.length,
+          skippedDuplicates,
           notified,
         });
       } catch (err) {
@@ -227,6 +233,7 @@ export async function GET(req: NextRequest) {
           model: w.model,
           matches: 0,
           newMatches: 0,
+          skippedDuplicates: 0,
           notified: false,
         });
       }
@@ -234,11 +241,13 @@ export async function GET(req: NextRequest) {
 
     const notifiedCount = report.filter((r) => r.notified).length;
     const totalNew = report.reduce((sum, r) => sum + r.newMatches, 0);
+    const skippedDuplicates = report.reduce((sum, r) => sum + r.skippedDuplicates, 0);
 
     return NextResponse.json({
       processedWishes: report.length,
       newMatchesFound: totalNew,
       notificationsSent: notifiedCount,
+      skippedDuplicates,
       durationMs: Date.now() - start,
       report,
     });

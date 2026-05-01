@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useBrandingOrFallback } from "@/components/branding/branding-provider";
 import {
@@ -104,11 +105,19 @@ const HOME_PATH: Record<UserRole, string> = {
   superadmin: "/admin",
 };
 
-export function Sidebar({ role, className }: SidebarProps) {
+export function Sidebar({ role: roleProp, className }: SidebarProps) {
   const pathname = usePathname();
   const branding = useBrandingOrFallback();
-  const items = NAV_ITEMS[role];
-  const home = HOME_PATH[role];
+  const { data: session } = useSession();
+
+  // A sidebar deve refletir o role REAL do usuario (vindo da sessao), nao o
+  // namespace da pagina passado via prop. Paginas /admin chamam DashboardLayout
+  // com role="admin" hardcoded — para superadmin, queremos os itens extra.
+  const sessionRole = (session?.user as { role?: UserRole } | undefined)?.role;
+  const effectiveRole: UserRole = sessionRole && NAV_ITEMS[sessionRole] ? sessionRole : roleProp;
+
+  const items = NAV_ITEMS[effectiveRole];
+  const home = HOME_PATH[effectiveRole];
 
   function isActive(href: string) {
     if (href === home) return pathname === href;

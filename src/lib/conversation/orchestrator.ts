@@ -443,6 +443,7 @@ async function notifyMatch(
   const claim = await claimNotificationSlot({
     tenantId: user.tenantId,
     wishId,
+    clientPhone: clientInfo?.phone ?? "",
     offerSource: top.offer.source,
     offerSourceId: top.offer.sourceId,
     recipientId: user.id,
