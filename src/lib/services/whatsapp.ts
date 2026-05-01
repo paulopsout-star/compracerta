@@ -64,7 +64,7 @@ async function logOutbound(params: {
   failureReason?: string;
 }): Promise<void> {
   try {
-    await supabase.from("whatsapp_outbound_messages").insert({
+    const row: Record<string, unknown> = {
       phone_e164: params.phoneE164,
       recipient_id: params.opts?.recipientId ?? null,
       recipient_type: params.opts?.recipientType ?? null,
@@ -74,7 +74,9 @@ async function logOutbound(params: {
       status: params.status === "skipped" ? "pending" : params.status,
       failure_reason: params.failureReason ?? null,
       sent_at: params.status === "sent" ? new Date().toISOString() : null,
-    });
+    };
+    if (params.opts?.tenantId) row.tenant_id = params.opts.tenantId;
+    await supabase.from("whatsapp_outbound_messages").insert(row);
   } catch (err) {
     console.warn("[WhatsApp] log outbound skipped:", err instanceof Error ? err.message : err);
   }

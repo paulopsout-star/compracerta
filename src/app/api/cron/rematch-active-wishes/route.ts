@@ -161,10 +161,9 @@ export async function GET(req: NextRequest) {
   }> = [];
 
   try {
-    const minScore = await getNumber("match.min_score_threshold", 70);
-    const autoNotify = await isEnabled("match.auto_notify.enabled");
-
-    // Busca desejos ativos, não expirados, limitado a 50 por execução
+    // Busca desejos ativos, não expirados, limitado a 50 por execução.
+    // Sem filtro de tenant_id: cron itera por todos os tenants ativos. As
+    // flags de match (min_score, auto_notify) sao lidas por tenant abaixo.
     const { data: wishes, error } = await supabase
       .from("wishes")
       .select("id, tenant_id, seller_id, brand, model, client_name, client_phone, expires_at")
@@ -188,6 +187,10 @@ export async function GET(req: NextRequest) {
 
     for (const w of (wishes ?? []) as WishListRow[]) {
       try {
+        // Flags por tenant — score minimo e auto_notify podem variar
+        const minScore = await getNumber("match.min_score_threshold", 70, w.tenant_id);
+        const autoNotify = await isEnabled("match.auto_notify.enabled", w.tenant_id);
+
         const matches = await runMatchingForWish(w.id);
 
         // Pool prioriza in-city; out-of-city só conta se não houver in-city

@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
                 external_dealership_name: offer.externalDealershipName ?? null,
                 synced_at: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : new Date().toISOString(),
               },
-              { onConflict: "source,source_id" }
+              { onConflict: "tenant_id,source,source_id" }
             )
             .select("id")
             .single();

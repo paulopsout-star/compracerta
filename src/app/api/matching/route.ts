@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
                 active: true,
                 synced_at: new Date().toISOString(),
               },
-              { onConflict: "source,source_id" }
+              { onConflict: "tenant_id,source,source_id" }
             )
             .select("id")
             .single();

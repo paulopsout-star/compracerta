@@ -202,3 +202,21 @@ export async function requireTenant(): Promise<ResolvedTenant> {
   if (!t) throw new Error("Tenant não resolvido — proxy não setou headers x-tenant-*");
   return t;
 }
+
+/**
+ * Resolve tenant pelo Z-API instance ID. Usado em webhooks WhatsApp inbound
+ * (1 instance ID por tenant). Faz lookup em `tenant_feature_flags` (key
+ * `whatsapp.zapi.instance_id`) via função SQL `resolve_tenant_by_zapi_instance`.
+ */
+export async function resolveTenantByZapiInstanceId(instanceId: string): Promise<string | null> {
+  if (!instanceId) return null;
+  const { data, error } = await supabase.rpc("resolve_tenant_by_zapi_instance", {
+    instance_id_input: instanceId,
+  });
+  if (error) {
+    console.error("[tenant] resolve_tenant_by_zapi_instance error:", error.message);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row?.tenant_id as string | undefined) ?? null;
+}

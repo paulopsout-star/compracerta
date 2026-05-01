@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { processInbound, type InboundEnvelope } from "@/lib/conversation/inbound-processor";
+import { resolveTenantByZapiInstanceId } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,35 +38,57 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 /**
- * Z-API via API (vs painel) não permite configurar header customizado. Aceitamos
- * qualquer uma das duas autenticações:
- * 1) Header X-Zapi-Signature bate com ZAPI_WEBHOOK_SECRET (alta segurança — quem
- *    configurou webhook via painel deve usar essa)
- * 2) payload.instanceId bate com ZAPI_INSTANCE_ID (fallback — Z-API sempre envia
- *    esse campo; um attacker teria que descobrir o ID, que não é público)
+ * Resolve o tenant a que o payload Z-API pertence + autentica.
+ *
+ * Ordem (multi-tenant):
+ * 1) payload.instanceId bate com algum tenant ativo (lookup em
+ *    tenant_feature_flags whatsapp.zapi.instance_id) — caminho preferido.
+ * 2) Header X-Zapi-Signature bate com ZAPI_WEBHOOK_SECRET global — fallback
+ *    legacy enquanto há só 1 tenant; resolve para tenant default.
+ * 3) instanceId bate com ZAPI_INSTANCE_ID env — fallback legacy idem.
+ *
+ * Retorna { tenantId, source } se autenticou, ou null.
  */
-function verifyAuth(req: NextRequest, payload: { instanceId?: string }): boolean {
+async function authenticateAndResolveTenant(
+  req: NextRequest,
+  payload: { instanceId?: string }
+): Promise<{ tenantId: string; source: "instance_lookup" | "secret_header" | "env_fallback" } | null> {
+  const instanceId = payload.instanceId?.trim();
+
+  // 1) Lookup multi-tenant pelo instanceId
+  if (instanceId) {
+    const tenantId = await resolveTenantByZapiInstanceId(instanceId);
+    if (tenantId) return { tenantId, source: "instance_lookup" };
+  }
+
+  // Fallbacks (transição enquanto envs antigas existem ou só 1 tenant ativo).
+  // Ambos resolvem para o tenant default `compra-certa`.
+  const { resolveTenantByHost } = await import("@/lib/tenant");
+  const hostFallback = await resolveTenantByHost("");
+  const fallbackTenantId = hostFallback?.id;
+  if (!fallbackTenantId) return null;
+
   const secret = process.env.ZAPI_WEBHOOK_SECRET;
   const expectedInstanceId = process.env.ZAPI_INSTANCE_ID?.trim();
 
-  // Caminho 1: header HMAC
   if (secret) {
     const header = req.headers.get("x-zapi-signature") ?? req.headers.get("X-Zapi-Signature") ?? "";
-    if (header && timingSafeEqual(header, secret)) return true;
+    if (header && timingSafeEqual(header, secret)) {
+      return { tenantId: fallbackTenantId, source: "secret_header" };
+    }
   }
 
-  // Caminho 2: instanceId bate
-  if (expectedInstanceId && payload.instanceId && payload.instanceId === expectedInstanceId) {
-    return true;
+  if (expectedInstanceId && instanceId === expectedInstanceId) {
+    return { tenantId: fallbackTenantId, source: "env_fallback" };
   }
 
-  // Dev: se nada configurado, aceita
+  // Dev: nada configurado — aceita no tenant default
   if (!secret && !expectedInstanceId) {
-    console.warn("[Webhook inbound] sem ZAPI_WEBHOOK_SECRET nem ZAPI_INSTANCE_ID — aceitando sem validação");
-    return true;
+    console.warn("[Webhook inbound] sem credenciais configuradas — aceitando no tenant default");
+    return { tenantId: fallbackTenantId, source: "env_fallback" };
   }
 
-  return false;
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -78,13 +101,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ack: false, error: "invalid_json" }, { status: 400 });
   }
 
-  if (!verifyAuth(req, payload)) {
-    console.warn("[Webhook inbound] autenticação falhou", {
+  const authResult = await authenticateAndResolveTenant(req, payload);
+  if (!authResult) {
+    console.warn("[Webhook inbound] autenticação falhou (instanceId não cadastrado em nenhum tenant)", {
       hasHeader: !!req.headers.get("x-zapi-signature"),
       payloadInstanceId: payload.instanceId,
     });
     return NextResponse.json({ ack: false, error: "invalid_signature" }, { status: 401 });
   }
+  console.log("[Webhook inbound] tenant resolved", { tenantId: authResult.tenantId, source: authResult.source });
 
   // Filtros obrigatórios
   if (payload.isGroup) {
@@ -101,6 +126,7 @@ export async function POST(req: NextRequest) {
   }
 
   const env: InboundEnvelope = {
+    tenantId: authResult.tenantId,
     providerMessageId: payload.messageId,
     phoneRaw: payload.phone,
     senderName: payload.senderName,

@@ -173,7 +173,7 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
       if (tenantId) offerPayload.tenant_id = tenantId;
       const { data: upserted } = await supabase
         .from("offers")
-        .upsert(offerPayload, { onConflict: "source,source_id" })
+        .upsert(offerPayload, { onConflict: "tenant_id,source,source_id" })
         .select("id")
         .single();
       if (upserted) offerId = upserted.id as string;

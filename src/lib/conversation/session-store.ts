@@ -46,8 +46,8 @@ function rowToSession(r: Record<string, unknown>): ConversationSessionRow {
   };
 }
 
-async function computeExpiresAt(): Promise<Date> {
-  const minutes = await getNumber("conversation.session_timeout_minutes", 30);
+async function computeExpiresAt(tenantId?: string | null): Promise<Date> {
+  const minutes = await getNumber("conversation.session_timeout_minutes", 30, tenantId);
   const d = new Date();
   d.setMinutes(d.getMinutes() + minutes);
   return d;
@@ -84,17 +84,19 @@ export async function getLatestSession(phoneE164: string): Promise<ConversationS
 }
 
 export async function createSession(params: {
+  tenantId: string;
   sellerId: string | null;
   phoneE164: string;
   state?: SessionState;
   draftWish?: Record<string, unknown> | null;
   context?: Record<string, unknown> | null;
 }): Promise<ConversationSessionRow> {
-  const expiresAt = await computeExpiresAt();
+  const expiresAt = await computeExpiresAt(params.tenantId);
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from("conversation_sessions")
     .insert({
+      tenant_id: params.tenantId,
       seller_id: params.sellerId,
       phone_e164: params.phoneE164,
       state: params.state ?? "idle",
@@ -135,8 +137,8 @@ export async function touchSession(id: string, patch?: Partial<{
   return rowToSession(data);
 }
 
-export async function getOrCreateActiveSession(sellerId: string | null, phoneE164: string): Promise<ConversationSessionRow> {
+export async function getOrCreateActiveSession(sellerId: string | null, phoneE164: string, tenantId: string): Promise<ConversationSessionRow> {
   const existing = await getActiveSession(phoneE164);
   if (existing) return existing;
-  return createSession({ sellerId, phoneE164 });
+  return createSession({ tenantId, sellerId, phoneE164 });
 }

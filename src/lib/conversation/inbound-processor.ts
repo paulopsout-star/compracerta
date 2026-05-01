@@ -20,6 +20,8 @@ import { getOrCreateActiveSession } from "@/lib/conversation/session-store";
 import { processTurn } from "@/lib/conversation/orchestrator";
 
 export interface InboundEnvelope {
+  /** Tenant resolvido pelo webhook (instanceId Z-API → tenant). */
+  tenantId: string;
   providerMessageId: string;
   phoneRaw: string;
   senderName?: string;
@@ -44,12 +46,13 @@ export interface ProcessResult {
   reason?: string;
 }
 
-async function isRateLimited(phoneE164: string): Promise<boolean> {
-  const limit = await getNumber("rate_limit.inbound_per_min_per_user", 10);
+async function isRateLimited(phoneE164: string, tenantId: string): Promise<boolean> {
+  const limit = await getNumber("rate_limit.inbound_per_min_per_user", 10, tenantId);
   const since = new Date(Date.now() - 60_000).toISOString();
   const { count } = await supabase
     .from("whatsapp_inbound_messages")
     .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
     .eq("phone_e164", phoneE164)
     .gte("received_at", since);
   return (count ?? 0) >= limit;
@@ -65,6 +68,7 @@ async function tryRegisterInbound(env: InboundEnvelope): Promise<{ acquired: boo
   const phoneE164 = toE164(env.phoneRaw);
   const contentType = env.audioUrl ? "audio" : env.imageUrl ? "image" : "text";
   const payload = {
+    tenant_id: env.tenantId,
     provider_message_id: env.providerMessageId,
     phone_e164: phoneE164,
     seller_id: null,
@@ -121,15 +125,16 @@ async function attachInboundContext(
 }
 
 export async function processInbound(env: InboundEnvelope): Promise<ProcessResult> {
-  console.log("[Inbound] enter", { messageId: env.providerMessageId, phone: env.phoneRaw, hasText: !!env.text });
+  console.log("[Inbound] enter", { messageId: env.providerMessageId, phone: env.phoneRaw, hasText: !!env.text, tenantId: env.tenantId });
   try {
-    if (await isEnabled("maintenance_mode.enabled")) {
+    if (await isEnabled("maintenance_mode.enabled", env.tenantId)) {
       await sendText(env.phoneRaw, renderTemplate("manutencao", { previsao_retorno: "em breve" }), {
         templateName: "manutencao",
+        tenantId: env.tenantId,
       });
       return { outcome: "maintenance" };
     }
-    if (!(await isEnabled("whatsapp.inbound.enabled"))) {
+    if (!(await isEnabled("whatsapp.inbound.enabled", env.tenantId))) {
       return { outcome: "inbound_disabled" };
     }
 
@@ -143,19 +148,20 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
 
     const phoneE164 = toE164(env.phoneRaw);
 
-    if (await isRateLimited(phoneE164)) {
+    if (await isRateLimited(phoneE164, env.tenantId)) {
       console.warn("[Inbound] rate limited:", phoneE164);
       return { outcome: "rate_limited" };
     }
 
-    console.log("[Inbound] identifying sender", { phoneE164 });
-    const ident = await identifySender(phoneE164, { displayName: env.senderName });
+    console.log("[Inbound] identifying sender", { phoneE164, tenantId: env.tenantId });
+    const ident = await identifySender(phoneE164, { displayName: env.senderName, tenantId: env.tenantId });
     console.log("[Inbound] ident result", { kind: ident.kind, userId: ident.kind !== "unknown" ? ident.user.id : null });
 
     // Desconhecido — resposta padrão (registro já foi feito acima)
     if (ident.kind === "unknown") {
       await sendText(env.phoneRaw, renderTemplate("numero_nao_cadastrado"), {
         templateName: "numero_nao_cadastrado",
+        tenantId: env.tenantId,
       });
       return { outcome: "unknown_sender" };
     }
@@ -164,7 +170,7 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
       await sendText(
         env.phoneRaw,
         renderTemplate("vendedor_inativo", { vendedor_nome: ident.user.name }),
-        { recipientId: ident.user.id, recipientType: "vendedor", templateName: "vendedor_inativo" }
+        { recipientId: ident.user.id, recipientType: "vendedor", templateName: "vendedor_inativo", tenantId: env.tenantId }
       );
       await attachInboundContext(env.providerMessageId, ident.user.id, null);
       return { outcome: "inactive_seller" };
@@ -172,23 +178,23 @@ export async function processInbound(env: InboundEnvelope): Promise<ProcessResul
 
     // Autenticado — cria/atualiza sessão
     const user = ident.user;
-    const session = await getOrCreateActiveSession(user.id, phoneE164);
+    const session = await getOrCreateActiveSession(user.id, phoneE164, env.tenantId);
     await attachInboundContext(env.providerMessageId, user.id, session.id);
 
     // Mídia — checa flags
-    if (env.audioUrl && !(await isEnabled("conversation.audio_transcription.enabled"))) {
+    if (env.audioUrl && !(await isEnabled("conversation.audio_transcription.enabled", env.tenantId))) {
       await sendText(
         env.phoneRaw,
         "Ainda não consigo ouvir áudios por aqui. Pode me mandar o mesmo conteúdo em texto?",
-        { recipientId: user.id, recipientType: "vendedor", templateName: "media_unsupported_audio" }
+        { recipientId: user.id, recipientType: "vendedor", templateName: "media_unsupported_audio", tenantId: env.tenantId }
       );
       return { outcome: "unsupported_media" };
     }
-    if (env.imageUrl && !(await isEnabled("conversation.image_recognition.enabled"))) {
+    if (env.imageUrl && !(await isEnabled("conversation.image_recognition.enabled", env.tenantId))) {
       await sendText(
         env.phoneRaw,
         "Recebi a foto, obrigado! Mas ainda não processo imagens automaticamente. Se puder, me conte em texto o modelo que o cliente procura.",
-        { recipientId: user.id, recipientType: "vendedor", templateName: "media_unsupported_image" }
+        { recipientId: user.id, recipientType: "vendedor", templateName: "media_unsupported_image", tenantId: env.tenantId }
       );
       return { outcome: "unsupported_media" };
     }

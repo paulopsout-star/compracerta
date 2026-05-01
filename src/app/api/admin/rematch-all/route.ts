@@ -112,7 +112,7 @@ export async function POST() {
             external_seller_name: offer.externalSellerName ?? null,
             external_dealership_name: offer.externalDealershipName ?? null,
             synced_at: new Date(offer.syncedAt).toISOString(),
-          }, { onConflict: "source,source_id" }).select("id").single();
+          }, { onConflict: "tenant_id,source,source_id" }).select("id").single();
           if (upserted) offerId = upserted.id as string;
         }
 
