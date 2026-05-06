@@ -13,6 +13,7 @@
 
 import { supabase } from "@/lib/db";
 import { isPhoneAuthorizedInAvaliador } from "@/lib/services/avaliador-api";
+import { brazilianPhoneVariants, phoneE164Variants, toCanonicalE164 } from "@/lib/phone";
 import { DEFAULT_TENANT_SLUG } from "@/lib/tenant";
 
 export interface AuthenticatedUser {
@@ -42,22 +43,29 @@ export type IdentifyResult =
 
 /**
  * Produz variações de string do telefone para tolerar formato gravado no cadastro
- * (alguns usuários cadastraram "(31) 98888-7777", outros "31988887777", etc.).
+ * (alguns usuários cadastraram "(31) 98888-7777", outros "31988887777", etc.) e
+ * a regra do 9 brasileira (provedor WhatsApp pode entregar o número sem o 9).
  */
 function phoneCandidates(phoneE164: string): string[] {
-  const digits = phoneE164.replace(/\D/g, "");
-  const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
-  const mobile11 = noDdi.length === 11 ? noDdi : null;
-  const landline10 = noDdi.length === 10 ? noDdi : null;
+  const variants = new Set<string>([phoneE164]);
 
-  const variants = new Set<string>([phoneE164, `+${digits}`, digits, noDdi]);
-  if (mobile11) {
-    variants.add(`(${mobile11.slice(0, 2)}) ${mobile11.slice(2, 7)}-${mobile11.slice(7)}`);
-    variants.add(`${mobile11.slice(0, 2)} ${mobile11.slice(2, 7)}-${mobile11.slice(7)}`);
-    variants.add(`${mobile11.slice(0, 2)}${mobile11.slice(2, 7)}${mobile11.slice(7)}`);
-  }
-  if (landline10) {
-    variants.add(`(${landline10.slice(0, 2)}) ${landline10.slice(2, 6)}-${landline10.slice(6)}`);
+  for (const e164 of phoneE164Variants(phoneE164)) {
+    const digits = e164.replace(/\D/g, "");
+    const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
+    variants.add(e164);
+    variants.add(`+${digits}`);
+    variants.add(digits);
+    variants.add(noDdi);
+
+    if (noDdi.length === 11) {
+      variants.add(`(${noDdi.slice(0, 2)}) ${noDdi.slice(2, 7)}-${noDdi.slice(7)}`);
+      variants.add(`${noDdi.slice(0, 2)} ${noDdi.slice(2, 7)}-${noDdi.slice(7)}`);
+      variants.add(`${noDdi.slice(0, 2)}${noDdi.slice(2, 7)}${noDdi.slice(7)}`);
+    } else if (noDdi.length === 10) {
+      variants.add(`(${noDdi.slice(0, 2)}) ${noDdi.slice(2, 6)}-${noDdi.slice(6)}`);
+      variants.add(`${noDdi.slice(0, 2)} ${noDdi.slice(2, 6)}-${noDdi.slice(6)}`);
+      variants.add(`${noDdi.slice(0, 2)}${noDdi.slice(2, 6)}${noDdi.slice(6)}`);
+    }
   }
   return Array.from(variants);
 }
@@ -84,21 +92,32 @@ async function autoCreateVendedorFromAvaliador(
   tenantId: string,
   displayName?: string
 ): Promise<Record<string, unknown> | null> {
-  const digits = phoneE164.replace(/\D/g, "");
-  const noDdi = digits.startsWith("55") ? digits.slice(2) : digits;
-  const placeholderEmail = `whatsapp+${noDdi}@compracerta.local`;
-  const name = (displayName?.trim() || `Vendedor ${noDdi.slice(0, 2)}-${noDdi.slice(-4)}`).slice(0, 120);
+  // Persiste sempre na forma canônica (com 9), independente do que o provedor
+  // entregou. Email placeholder também usa a forma canônica para idempotência.
+  const canonicalE164 = toCanonicalE164(phoneE164) ?? phoneE164;
+  const canonicalDigits = canonicalE164.replace(/\D/g, "");
+  const canonicalNoDdi = canonicalDigits.startsWith("55") ? canonicalDigits.slice(2) : canonicalDigits;
+  const placeholderEmail = `whatsapp+${canonicalNoDdi}@compracerta.local`;
+  const name = (displayName?.trim() || `Vendedor ${canonicalNoDdi.slice(0, 2)}-${canonicalNoDdi.slice(-4)}`).slice(0, 120);
 
-  // Idempotência: por (tenant, email) — emails iguais entre tenants são possíveis.
+  // Idempotência: também olha o e-mail legado (sem o 9) caso já exista cadastro
+  // criado antes desta normalização.
+  const legacyVariant = brazilianPhoneVariants(phoneE164).find((d) => d !== canonicalNoDdi);
+  const placeholderEmails = [placeholderEmail];
+  if (legacyVariant) placeholderEmails.push(`whatsapp+${legacyVariant}@compracerta.local`);
+
   const { data: existing } = await supabase
     .from("users")
-    .select("id, name, role, active, phone, tenant_id, dealership_id, dealer_store_id")
+    .select("id, name, role, active, phone, tenant_id, dealership_id, dealer_store_id, email")
     .eq("tenant_id", tenantId)
-    .eq("email", placeholderEmail)
+    .in("email", placeholderEmails)
     .maybeSingle();
   if (existing) {
-    if (existing.phone !== phoneE164) {
-      await supabase.from("users").update({ phone: phoneE164 }).eq("id", existing.id as string);
+    const updates: Record<string, unknown> = {};
+    if (existing.phone !== canonicalE164) updates.phone = canonicalE164;
+    if (existing.email !== placeholderEmail) updates.email = placeholderEmail;
+    if (Object.keys(updates).length > 0) {
+      await supabase.from("users").update(updates).eq("id", existing.id as string);
     }
     return existing;
   }
@@ -109,7 +128,7 @@ async function autoCreateVendedorFromAvaliador(
       tenant_id: tenantId,
       name,
       email: placeholderEmail,
-      phone: phoneE164,
+      phone: canonicalE164,
       role: "vendedor",
       active: true,
     })
@@ -120,7 +139,7 @@ async function autoCreateVendedorFromAvaliador(
     console.error("[seller-auth] auto-create falhou:", error.message);
     return null;
   }
-  console.log("[seller-auth] vendedor auto-criado via Avaliador:", { id: created.id, phone: phoneE164, tenantId });
+  console.log("[seller-auth] vendedor auto-criado via Avaliador:", { id: created.id, phone: canonicalE164, tenantId });
   return created;
 }
 
@@ -148,7 +167,12 @@ export async function identifySender(
   }
 
   // 2) Fallback robusto: compara por dígitos apenas (cobre qualquer formato)
+  // e tolera a regra do 9 (com e sem o nono dígito mobile).
   if (!userRow) {
+    const inboundVariantsNoDdi = new Set<string>(brazilianPhoneVariants(phoneE164));
+    inboundVariantsNoDdi.add(inboundNoDdi);
+    inboundVariantsNoDdi.add(inboundDigits);
+
     let q = supabase
       .from("users")
       .select("id, name, role, active, phone, tenant_id, dealership_id, dealer_store_id")
@@ -159,7 +183,12 @@ export async function identifySender(
       const storedDigits = ((u.phone as string | null) ?? "").replace(/\D/g, "");
       if (!storedDigits) continue;
       const storedNoDdi = storedDigits.startsWith("55") ? storedDigits.slice(2) : storedDigits;
-      if (storedDigits === inboundDigits || storedNoDdi === inboundNoDdi) {
+      const storedVariants = new Set<string>([storedDigits, storedNoDdi, ...brazilianPhoneVariants(storedDigits)]);
+      let matched = false;
+      for (const v of storedVariants) {
+        if (inboundVariantsNoDdi.has(v)) { matched = true; break; }
+      }
+      if (matched) {
         userRow = u;
         break;
       }

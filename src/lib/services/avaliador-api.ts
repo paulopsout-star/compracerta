@@ -1,4 +1,5 @@
 import type { Offer, Wish } from "@/types";
+import { brazilianPhoneVariants } from "@/lib/phone";
 
 /**
  * Cliente da API pública do Avaliador Digital.
@@ -168,43 +169,50 @@ export async function fetchAvaliadorOffersForWish(wish: Wish): Promise<Offer[]> 
  * Endpoint: GET /API/V1/Get/CompraCerta?contato=<digits>
  *   - 200 + success:true  → autorizado
  *   - 404 + success:false → não autorizado
- *   - outros / timeout / erro → false (fail-closed)
+ *   - outros / timeout / erro → ignorado (tenta próxima variante; fail-closed no fim)
  *
- * Aceita phoneE164 ('+5547997531517') ou só dígitos. Normaliza para o
- * formato esperado pela API: 'DDDXXXXXXXXX' (sem DDI 55, sem +).
+ * Tolera a regra do 9 brasileira: tenta primeiro a forma canônica (com 9 após
+ * o DDD); se a API não encontrar, faz fallback para a forma legada (sem 9).
  */
 export async function isPhoneAuthorizedInAvaliador(phone: string): Promise<boolean> {
   if (process.env.AVALIADOR_API_ENABLED?.trim() !== "true") return false;
 
-  const allDigits = phone.replace(/\D/g, "");
-  const noDdi = allDigits.startsWith("55") ? allDigits.slice(2) : allDigits;
-  if (noDdi.length !== 10 && noDdi.length !== 11) return false;
+  const candidates = brazilianPhoneVariants(phone).filter(
+    (d) => d.length === 10 || d.length === 11
+  );
+  if (candidates.length === 0) return false;
 
   const baseUrl = (process.env.AVALIADOR_API_URL?.trim()) || DEFAULT_BASE_URL;
-  const url = `${baseUrl}/API/V1/Get/CompraCerta?contato=${noDdi}`;
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    const res = await fetch(url, {
-      method: "GET",
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
+  for (const noDdi of candidates) {
+    const url = `${baseUrl}/API/V1/Get/CompraCerta?contato=${noDdi}`;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      const res = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+      clearTimeout(timeout);
 
-    if (res.status === 200) {
-      const body = (await res.json().catch(() => ({}))) as { success?: boolean };
-      return body.success === true;
+      if (res.status === 200) {
+        const body = (await res.json().catch(() => ({}))) as { success?: boolean };
+        if (body.success === true) {
+          if (candidates.length > 1 && noDdi !== candidates[0]) {
+            console.log(`[Avaliador CompraCerta] autorizado via fallback ${noDdi}`);
+          }
+          return true;
+        }
+      } else if (res.status !== 404) {
+        console.warn(`[Avaliador CompraCerta] HTTP ${res.status} para ${noDdi}`);
+      }
+    } catch (err) {
+      console.error("[Avaliador CompraCerta] erro:", err instanceof Error ? err.message : err);
     }
-    if (res.status === 404) return false;
-    console.warn(`[Avaliador CompraCerta] HTTP ${res.status} para ${noDdi}`);
-    return false;
-  } catch (err) {
-    console.error("[Avaliador CompraCerta] erro:", err instanceof Error ? err.message : err);
-    return false;
   }
+  return false;
 }
 
 /**
