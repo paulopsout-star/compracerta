@@ -109,25 +109,34 @@ export default function VendedorDashboard() {
                   { key: "price", label: "Faixa", align: "right", minWidth: "110px" },
                   { key: "status", label: "Status", align: "center", minWidth: "96px" },
                 ]}
-                rows={(data?.recentWishes ?? []).slice(0, 10).map((w) => ({
-                  id: w.id,
-                  avatar: { text: brandInitial(w.brand), color: "#2563EB" },
-                  title: `${w.brand} ${w.model}`,
-                  subtitle: `${w.year_min ?? "—"}${w.year_max && w.year_max !== w.year_min ? `–${w.year_max}` : ""} · ${w.client_name}`,
-                  cells: {
-                    price: (
-                      <span className="text-[#111827] text-[12px]">
-                        {w.price_min && w.price_max ? `${fmt(w.price_min)} – ${fmt(w.price_max)}` : fmt(w.price_max ?? w.price_min)}
-                      </span>
-                    ),
-                    status: (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_CLS[w.status]?.cls ?? STATUS_CLS.procurando.cls}`}>
-                        {STATUS_CLS[w.status]?.label ?? w.status}
-                      </span>
-                    ),
-                  },
-                  action: { label: "Ver match", onClick: () => router.push("/vendedor/matches") },
-                }))}
+                rows={(data?.recentWishes ?? []).slice(0, 10).map((w) => {
+                  // Botao "Ver match" so faz sentido quando ha matches reais.
+                  // Status "procurando" e "expirado" nao chegam a gerar match
+                  // qualificado, entao escondemos a acao para evitar levar o
+                  // usuario para uma tela vazia.
+                  const hasMatches = w.status !== "procurando" && w.status !== "expirado";
+                  return {
+                    id: w.id,
+                    avatar: { text: brandInitial(w.brand), color: "#2563EB" },
+                    title: `${w.brand} ${w.model}`,
+                    subtitle: `${w.year_min ?? "—"}${w.year_max && w.year_max !== w.year_min ? `–${w.year_max}` : ""} · ${w.client_name}`,
+                    cells: {
+                      price: (
+                        <span className="text-[#111827] text-[12px]">
+                          {w.price_min && w.price_max ? `${fmt(w.price_min)} – ${fmt(w.price_max)}` : fmt(w.price_max ?? w.price_min)}
+                        </span>
+                      ),
+                      status: (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_CLS[w.status]?.cls ?? STATUS_CLS.procurando.cls}`}>
+                          {STATUS_CLS[w.status]?.label ?? w.status}
+                        </span>
+                      ),
+                    },
+                    action: hasMatches
+                      ? { label: "Ver match", onClick: () => router.push(`/vendedor/matches?wishId=${encodeURIComponent(w.id)}`) }
+                      : undefined,
+                  };
+                })}
               />
             )}
           </>
