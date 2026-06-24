@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase, insert } from "@/lib/db";
 import { getRequestScope } from "@/lib/tenant-scope";
+import { serializeOfferRows, toPublicOffer } from "@/lib/services/offer-images";
 
 // GET /api/ofertas — List offers
 export async function GET(request: NextRequest) {
@@ -39,8 +40,11 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
     if (error) throw error;
 
+    // Saneia: remove placa e anexa fotos tratadas.
+    const safeData = await serializeOfferRows((data ?? []) as Record<string, unknown>[]);
+
     return NextResponse.json({
-      data,
+      data: safeData,
       pagination: {
         page,
         limit,
@@ -82,7 +86,10 @@ export async function POST(request: NextRequest) {
       dealer_store_id: scope.dealerStoreId ?? null,
     });
 
-    return NextResponse.json({ message: "Oferta criada", offer }, { status: 201 });
+    return NextResponse.json(
+      { message: "Oferta criada", offer: toPublicOffer(offer as Record<string, unknown>) },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("[API] Error creating offer:", error);
     return NextResponse.json({ error: "Erro ao criar oferta" }, { status: 500 });

@@ -87,11 +87,28 @@ export interface Wish {
   expiresAt: Date;
 }
 
+/** Referencia a uma foto da oferta (capturada da fonte externa, ainda nao tratada). */
+export interface OfferImageRef {
+  /** URL crua na fonte (ex.: http do Avaliador). Uso interno — nao expor ao frontend. */
+  url: string;
+  capa: boolean;
+  position: number;
+}
+
+/** Foto ja tratada e pronta pra exibir (placa coberta/limpa, re-hospedada). */
+export interface OfferPhoto {
+  /** URL publica https no Supabase Storage. */
+  url: string;
+  isCapa: boolean;
+}
+
 export interface Offer {
   id: string;
   source: OfferSource;
   sourceId: string;
   plate?: string;
+  /** Fotos cruas vindas da fonte externa (pre-processamento). Uso interno. */
+  images?: OfferImageRef[];
   brand: string;
   model: string;
   version?: string;

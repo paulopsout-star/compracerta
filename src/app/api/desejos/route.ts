@@ -3,6 +3,7 @@ import { supabase, insert } from "@/lib/db";
 import { wishSchema } from "@/lib/validators/wish";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish, buildPresentSourceIdsSet } from "@/lib/services/avaliador-api";
+import { upsertExternalOffer } from "@/lib/services/offer-images";
 import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
 import { getRequestScope } from "@/lib/tenant-scope";
 import type { Wish, Offer } from "@/types";
@@ -168,40 +169,10 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // Persist external offers and create match records (FK integrity)
+        // Persist external offers (+ enfileira fotos) e cria match records (FK integrity)
         let offerId = offer.id;
         if (offer.source !== "estoque_lojista") {
-          // NOTE: onConflict ainda usa (source, source_id) global — ate PR2.5
-          // remover o UNIQUE antigo. Com multi-tenant ativo, isso colide entre
-          // tenants. Seguro enquanto soh ha 1 tenant ativo.
-          const { data: upserted } = await supabase
-            .from("offers")
-            .upsert(
-              {
-                tenant_id: scope.tenantId,
-                source: offer.source,
-                source_id: offer.sourceId,
-                plate: offer.plate ?? null,
-                brand: offer.brand,
-                model: offer.model,
-                version: offer.version ?? null,
-                year: offer.year,
-                km: offer.km,
-                color: offer.color ?? null,
-                price: offer.price,
-                city: offer.city,
-                state: offer.state,
-                active: true,
-                external_status: offer.externalStatus ?? null,
-                external_seller_name: offer.externalSellerName ?? null,
-                external_dealership_name: offer.externalDealershipName ?? null,
-                synced_at: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : new Date().toISOString(),
-              },
-              { onConflict: "tenant_id,source,source_id" }
-            )
-            .select("id")
-            .single();
-          if (upserted) offerId = upserted.id as string;
+          offerId = await upsertExternalOffer(offer, scope.tenantId);
         }
 
         const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";

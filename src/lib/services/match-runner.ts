@@ -9,6 +9,7 @@ import { supabase } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish, buildPresentSourceIdsSet } from "@/lib/services/avaliador-api";
 import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
+import { upsertExternalOffer } from "@/lib/services/offer-images";
 import type { Wish, Offer } from "@/types";
 
 export interface MatchSummary {
@@ -148,35 +149,10 @@ export async function runMatchingForWish(wishId: string): Promise<MatchSummary[]
     const result = calculateMatchScore(wish, offer);
     if (result.score < MATCH_THRESHOLDS.SUGGESTION) continue;
 
-    // Persiste oferta externa (upsert) para ter FK válida no match
+    // Persiste oferta externa (upsert) + enfileira fotos — FK válida no match
     let offerId = offer.id;
     if (offer.source !== "estoque_lojista") {
-      const offerPayload: Record<string, unknown> = {
-        source: offer.source,
-        source_id: offer.sourceId,
-        plate: offer.plate ?? null,
-        brand: offer.brand,
-        model: offer.model,
-        version: offer.version ?? null,
-        year: offer.year,
-        km: offer.km,
-        color: offer.color ?? null,
-        price: offer.price,
-        city: offer.city,
-        state: offer.state,
-        active: true,
-        external_status: offer.externalStatus ?? null,
-        external_seller_name: offer.externalSellerName ?? null,
-        external_dealership_name: offer.externalDealershipName ?? null,
-        synced_at: offer.syncedAt ? new Date(offer.syncedAt).toISOString() : new Date().toISOString(),
-      };
-      if (tenantId) offerPayload.tenant_id = tenantId;
-      const { data: upserted } = await supabase
-        .from("offers")
-        .upsert(offerPayload, { onConflict: "tenant_id,source,source_id" })
-        .select("id")
-        .single();
-      if (upserted) offerId = upserted.id as string;
+      offerId = await upsertExternalOffer(offer, tenantId);
     }
 
     const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";

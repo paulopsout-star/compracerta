@@ -1,0 +1,43 @@
+# Render Blueprint — worker de redacao de placa (plate-redactor).
+# Deploy a partir do GitHub: New > Blueprint > conecta este repo.
+# Os secrets (sync:false) sao preenchidos no dashboard do Render.
+services:
+  - type: worker
+    name: plate-redactor
+    runtime: docker
+    repo: https://github.com/paulopsout-star/compracerta
+    dockerfilePath: ./services/plate-redactor/Dockerfile
+    dockerContext: ./services/plate-redactor
+    region: oregon
+    plan: starter # Background workers exigem plano pago (nao ha free tier de worker)
+    autoDeploy: true
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: STORAGE_BUCKET
+        value: offer-images
+      # MODO SEGURO: vazio = worker sobe ocioso (nao serve foto) ate haver modelo.
+      # Quando treinar os pesos, defina como "true" e configure MODEL_PATH.
+      - key: PLATE_MODEL_ENABLED
+        value: ""
+      - key: MODEL_PATH
+        value: models/plate.pt
+      - key: BATCH_SIZE
+        value: "8"
+      - key: MAX_ATTEMPTS
+        value: "3"
+      - key: POLL_INTERVAL_SECONDS
+        value: "5"
+      - key: DOWNLOAD_TIMEOUT_SECONDS
+        value: "20"
+      # Politica de redacao (calibravel depois, sem redeploy).
+      - key: PLATE_CONF_BLUR
+        value: "0.35"
+      - key: PLATE_CONF_DOUBT
+        value: "0.15"
+      - key: PLATE_HIDE_ON_DOUBT
+        value: "1"
+      - key: PLATE_BOX_MARGIN
+        value: "0.25"

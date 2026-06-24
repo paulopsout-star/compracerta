@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { getRequestScope } from "@/lib/tenant-scope";
+import { attachImagesToMatchRows, serializeOfferRows } from "@/lib/services/offer-images";
 
 // GET /api/dashboard — Stats for the current user's dashboard, scoped to tenant.
 export async function GET() {
@@ -57,8 +58,9 @@ export async function GET() {
       return NextResponse.json({
         totalOffers: offers.count ?? 0,
         totalMatches: matches.data?.length ?? 0,
-        offers: offers.data ?? [],
-        matches: matches.data ?? [],
+        // Saneia: remove placa e anexa fotos tratadas.
+        offers: await serializeOfferRows((offers.data ?? []) as Record<string, unknown>[]),
+        matches: await attachImagesToMatchRows((matches.data ?? []) as Record<string, unknown>[]),
       });
     }
 

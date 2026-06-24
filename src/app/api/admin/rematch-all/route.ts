@@ -3,6 +3,7 @@ import { supabase } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish, buildPresentSourceIdsSet } from "@/lib/services/avaliador-api";
 import { cleanupStaleMatchesForWish } from "@/lib/services/match-cleanup";
+import { upsertExternalOffer } from "@/lib/services/offer-images";
 import { getAdminScope } from "@/lib/tenant-scope";
 import type { Wish, Offer } from "@/types";
 
@@ -93,27 +94,7 @@ export async function POST() {
 
         let offerId = offer.id;
         if (offer.source !== "estoque_lojista") {
-          const { data: upserted } = await supabase.from("offers").upsert({
-            tenant_id: scope.tenantId,
-            source: offer.source,
-            source_id: offer.sourceId,
-            plate: offer.plate ?? null,
-            brand: offer.brand,
-            model: offer.model,
-            version: offer.version ?? null,
-            year: offer.year,
-            km: offer.km,
-            color: offer.color ?? null,
-            price: offer.price,
-            city: offer.city,
-            state: offer.state,
-            active: true,
-            external_status: offer.externalStatus ?? null,
-            external_seller_name: offer.externalSellerName ?? null,
-            external_dealership_name: offer.externalDealershipName ?? null,
-            synced_at: new Date(offer.syncedAt).toISOString(),
-          }, { onConflict: "tenant_id,source,source_id" }).select("id").single();
-          if (upserted) offerId = upserted.id as string;
+          offerId = await upsertExternalOffer(offer, scope.tenantId);
         }
 
         const matchStatus = result.score >= MATCH_THRESHOLDS.AUTO_NOTIFY ? "notificado" : "novo";
