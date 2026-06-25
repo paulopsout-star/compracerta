@@ -14,9 +14,16 @@ Roda continuamente (fora da Vercel). Idempotente e resiliente a multiplos worker
 from __future__ import annotations
 
 import os
+
+# Limita threads de BLAS/torch ANTES de importar torch — corta o pico de RAM
+# (essencial em hosts de 512MB). Definido aqui pra valer no import do ultralytics.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import requests
 from dotenv import load_dotenv
@@ -36,11 +43,25 @@ BATCH_SIZE = int(os.getenv("BATCH_SIZE", "8"))
 MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "3"))
 POLL_INTERVAL = float(os.getenv("POLL_INTERVAL_SECONDS", "5"))
 DOWNLOAD_TIMEOUT = float(os.getenv("DOWNLOAD_TIMEOUT_SECONDS", "20"))
+# Linhas presas em 'processing' por mais que isto (ex.: worker morto por OOM antes
+# de finalizar) voltam pra 'pending' e sao reprocessadas.
+STALE_PROCESSING_MIN = float(os.getenv("STALE_PROCESSING_MINUTES", "5"))
 
 sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 # Instanciado so quando ha modelo (ver main). Em modo seguro fica None e o worker
 # nao processa nada — garante que NENHUMA foto com placa seja servida sem deteccao.
 detector: PlateDetector | None = None
+
+
+def reclaim_stale() -> None:
+    """Devolve pra 'pending' linhas presas em 'processing' (worker morto antes de
+    finalizar — ex.: OOM). Sem isto elas ficariam orfas pra sempre."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=STALE_PROCESSING_MIN)).isoformat()
+    try:
+        sb.table("offer_images").update({"status": "pending", "updated_at": iso_now()}) \
+            .eq("status", "processing").lt("updated_at", cutoff).execute()
+    except Exception as e:  # noqa: BLE001
+        print(f"[plate-redactor] reclaim_stale falhou: {e}", flush=True)
 
 
 def claim_pending(limit: int) -> list[dict]:
@@ -175,6 +196,7 @@ def main() -> None:
           f"batch={BATCH_SIZE} max_attempts={MAX_ATTEMPTS}", flush=True)
     while True:
         heartbeat("active")
+        reclaim_stale()
         try:
             rows = claim_pending(BATCH_SIZE)
         except Exception as e:  # noqa: BLE001

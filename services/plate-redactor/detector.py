@@ -22,6 +22,10 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+# imgsz da inferencia. 640 bate com o treino e cabe em 512MB de RAM; 1280 pega
+# placas menores mas estoura memoria em hosts pequenos. Ajuste por env se tiver
+# mais RAM/GPU.
+INFER_IMGSZ = int(os.getenv("PLATE_IMGSZ", "640"))
 CONF_BLUR = float(os.getenv("PLATE_CONF_BLUR", "0.35"))
 CONF_DOUBT = float(os.getenv("PLATE_CONF_DOUBT", "0.15"))
 HIDE_ON_DOUBT = os.getenv("PLATE_HIDE_ON_DOUBT", "1").strip() not in ("0", "false", "False", "")
@@ -47,8 +51,7 @@ class PlateDetector:
         self.model = YOLO(model_path)
 
     def _detect(self, img: np.ndarray) -> list[Box]:
-        # imgsz alto ajuda a pegar placas pequenas/distantes (mais recall).
-        results = self.model.predict(img, conf=CONF_DOUBT, imgsz=1280, verbose=False)
+        results = self.model.predict(img, conf=CONF_DOUBT, imgsz=INFER_IMGSZ, verbose=False)
         boxes: list[Box] = []
         for r in results:
             if r.boxes is None:
