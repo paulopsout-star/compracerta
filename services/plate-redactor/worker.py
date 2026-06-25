@@ -30,6 +30,7 @@ SUPABASE_URL = os.environ["SUPABASE_URL"].strip()
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"].strip()
 STORAGE_BUCKET = os.getenv("STORAGE_BUCKET", "offer-images").strip()
 MODEL_PATH = os.getenv("MODEL_PATH", "models/plate.pt").strip()
+MODEL_URL = os.getenv("MODEL_URL", "").strip()
 MODEL_ENABLED = os.getenv("PLATE_MODEL_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "8"))
 MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "3"))
@@ -70,6 +71,28 @@ def claim_pending(limit: int) -> list[dict]:
 
 def iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def ensure_model() -> bool:
+    """Garante que os pesos existam em MODEL_PATH. Se faltarem e MODEL_URL estiver
+    setado, baixa (assim nao precisamos commitar o .pt no git/imagem). Retorna
+    True se ha modelo pronto pra carregar."""
+    if os.path.exists(MODEL_PATH):
+        return True
+    if not MODEL_URL:
+        return False
+    try:
+        os.makedirs(os.path.dirname(MODEL_PATH) or ".", exist_ok=True)
+        print(f"[plate-redactor] baixando modelo de {MODEL_URL[:70]}...", flush=True)
+        r = requests.get(MODEL_URL, timeout=120)
+        r.raise_for_status()
+        with open(MODEL_PATH, "wb") as f:
+            f.write(r.content)
+        print(f"[plate-redactor] modelo salvo em {MODEL_PATH} ({len(r.content)} bytes)", flush=True)
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"[plate-redactor] download do modelo falhou: {e}", flush=True)
+        return False
 
 
 def heartbeat(mode: str) -> None:
@@ -139,8 +162,8 @@ def main() -> None:
     # A fila fica 'pending' e o frontend mostra placeholder — nunca servimos uma
     # foto com placa sem ter passado pela deteccao. Quando os pesos chegarem,
     # ligue PLATE_MODEL_ENABLED=true e o backlog e processado automaticamente.
-    if not MODEL_ENABLED or not os.path.exists(MODEL_PATH):
-        reason = "PLATE_MODEL_ENABLED!=true" if not MODEL_ENABLED else f"pesos ausentes em {MODEL_PATH}"
+    if not MODEL_ENABLED or not ensure_model():
+        reason = "PLATE_MODEL_ENABLED!=true" if not MODEL_ENABLED else f"pesos indisponiveis (MODEL_PATH={MODEL_PATH}, MODEL_URL nao setado/baixou)"
         print(f"[plate-redactor] MODO SEGURO (ocioso): {reason}. Nenhuma foto sera "
               f"processada/servida ate haver modelo. Sem risco de vazar placa.", flush=True)
         while True:

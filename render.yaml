@@ -24,6 +24,9 @@ services:
         value: ""
       - key: MODEL_PATH
         value: models/plate.pt
+      # URL do plate.pt pro worker baixar no boot (deixe vazio ate treinar).
+      - key: MODEL_URL
+        value: ""
       - key: BATCH_SIZE
         value: "8"
       - key: MAX_ATTEMPTS
