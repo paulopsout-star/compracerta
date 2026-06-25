@@ -72,6 +72,18 @@ def iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def heartbeat(mode: str) -> None:
+    """Grava 'estou vivo' em worker_health a cada ciclo (inclusive em modo seguro).
+    Permite verificar de fora que o worker subiu e esta conectado no Supabase certo."""
+    try:
+        sb.table("worker_health").upsert(
+            {"worker": "plate-redactor", "mode": mode, "last_seen_at": iso_now(), "updated_at": iso_now()},
+            on_conflict="worker",
+        ).execute()
+    except Exception as e:  # noqa: BLE001
+        print(f"[plate-redactor] heartbeat falhou: {e}", flush=True)
+
+
 def storage_path(row: dict) -> str:
     return f"{row['tenant_id']}/{row['offer_id']}/{row['id']}.jpg"
 
@@ -132,12 +144,14 @@ def main() -> None:
         print(f"[plate-redactor] MODO SEGURO (ocioso): {reason}. Nenhuma foto sera "
               f"processada/servida ate haver modelo. Sem risco de vazar placa.", flush=True)
         while True:
+            heartbeat("safe")
             time.sleep(max(POLL_INTERVAL, 30.0))
 
     detector = PlateDetector(MODEL_PATH)
     print(f"[plate-redactor] iniciado | bucket={STORAGE_BUCKET} model={MODEL_PATH} "
           f"batch={BATCH_SIZE} max_attempts={MAX_ATTEMPTS}", flush=True)
     while True:
+        heartbeat("active")
         try:
             rows = claim_pending(BATCH_SIZE)
         except Exception as e:  # noqa: BLE001
