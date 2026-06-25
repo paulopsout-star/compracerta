@@ -13,6 +13,11 @@ import { brazilianPhoneVariants } from "@/lib/phone";
 
 const DEFAULT_BASE_URL = "https://hmlv2api.avaliadordigital.com.br";
 
+interface AvaliadorImagem {
+  capa: boolean;
+  caminho_url: string;
+}
+
 interface AvaliadorVehicle {
   marca: string;
   modelo: string;
@@ -28,6 +33,7 @@ interface AvaliadorVehicle {
   uf: string;
   vendedor?: string | null;
   concessionaria?: string | null;
+  imagens?: AvaliadorImagem[] | null;
 }
 
 interface AvaliadorResponse {
@@ -64,10 +70,22 @@ function vehicleToOffer(v: AvaliadorVehicle, _index: number): Offer {
     ? v.valor_desejado
     : 0;
 
+  // Fotos: a flag `capa` da API e pouco confiavel (muitos itens vem sem nenhuma
+  // capa=true), entao tambem guardamos a posicao pra desempate no read path.
+  // URLs http sao re-hospedadas depois — aqui so capturamos as referencias cruas.
+  const images = (v.imagens ?? [])
+    .filter((img) => img && typeof img.caminho_url === "string" && img.caminho_url.trim() !== "")
+    .map((img, index) => ({
+      url: img.caminho_url.trim(),
+      capa: img.capa === true,
+      position: index,
+    }));
+
   return {
     id: `av-${syntheticId}`,
     source: "avaliador",
     sourceId: syntheticId,
+    images,
     brand: v.marca.trim(),
     model: v.modelo.trim(),
     year: parseInt(v.ano_modelo) || parseInt(v.ano_fabricacao) || 0,

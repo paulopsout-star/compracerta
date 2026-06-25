@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase, insert } from "@/lib/db";
 import { calculateMatchScore, MATCH_THRESHOLDS } from "@/lib/services/matching";
 import { fetchExternalOffersForWish } from "@/lib/services/avaliador-api";
+import { upsertExternalOffer, attachImagesToMatchRows } from "@/lib/services/offer-images";
 import { getRequestScope } from "@/lib/tenant-scope";
 import type { Wish, Offer } from "@/types";
 
@@ -100,34 +101,10 @@ export async function POST(request: NextRequest) {
         if (result.score < MATCH_THRESHOLDS.SUGGESTION) continue;
 
         // External offers (marketplace/avaliador) come from SQL Server.
-        // Upsert them into the Supabase `offers` table so FK in matches works.
+        // Upsert into Supabase `offers` (+ enfileira fotos) so FK in matches works.
         let offerId = offer.id;
         if (offer.source !== "estoque_lojista") {
-          const { data: upserted } = await supabase
-            .from("offers")
-            .upsert(
-              {
-                tenant_id: scope.tenantId,
-                source: offer.source,
-                source_id: offer.sourceId,
-                plate: offer.plate ?? null,
-                brand: offer.brand,
-                model: offer.model,
-                version: offer.version ?? null,
-                year: offer.year,
-                km: offer.km,
-                color: offer.color ?? null,
-                price: offer.price,
-                city: offer.city,
-                state: offer.state,
-                active: true,
-                synced_at: new Date().toISOString(),
-              },
-              { onConflict: "tenant_id,source,source_id" }
-            )
-            .select("id")
-            .single();
-          if (upserted) offerId = upserted.id as string;
+          offerId = await upsertExternalOffer(offer, scope.tenantId);
         }
 
         // Check if match already exists
@@ -229,7 +206,9 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw error;
 
-    return NextResponse.json({ data });
+    // Saneia: remove placa e anexa fotos tratadas a cada offer.
+    const safeData = await attachImagesToMatchRows((data ?? []) as Record<string, unknown>[]);
+    return NextResponse.json({ data: safeData });
   } catch (error) {
     console.error("[API] Error fetching matches:", error);
     return NextResponse.json({ error: "Erro interno" }, { status: 500 });

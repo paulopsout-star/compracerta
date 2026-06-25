@@ -242,12 +242,46 @@ model Offer {
 
   dealerStore    DealerStore? @relation(fields: [dealerStoreId], references: [id])
   matches        Match[]
+  images         OfferImage[]
 
   @@unique([source, sourceId])
   @@index([brand, model])
   @@index([active])
   @@index([source])
   @@map("offers")
+}
+
+/// Fotos de uma oferta (ex.: array `imagens` do Avaliador). Fila de processamento:
+/// o worker plate-redactor cobre a placa (ou esconde a foto) e re-hospeda no
+/// Supabase Storage. `sourceUrl`/`storagePath` NUNCA vao ao frontend; o read path
+/// serve so status='done'. Ver prisma/migrations/offer_images/migration.sql.
+model OfferImage {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()::text"))
+  tenantId            String    @map("tenant_id")
+  offerId             String    @map("offer_id")
+  sourceUrl           String    @map("source_url")
+  isCapa              Boolean   @default(false) @map("is_capa")
+  position            Int       @default(0)
+  /// pending | processing | done | hidden | error
+  status              String    @default("pending")
+  /// blurred | clean | hidden (null enquanto nao processado)
+  action              String?
+  hasPlate            Boolean?  @map("has_plate")
+  detectionConfidence Float?    @map("detection_confidence")
+  storagePath         String?   @map("storage_path")
+  attempts            Int       @default(0)
+  lastError           String?   @map("last_error")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at")
+  processedAt         DateTime? @map("processed_at")
+
+  offer               Offer     @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, sourceUrl])
+  @@index([status])
+  @@index([offerId])
+  @@index([tenantId])
+  @@map("offer_images")
 }
 
 model Match {

@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { OfferThumb, OfferGallery, type OfferImage } from "@/components/dashboard/offer-gallery";
 import { Zap, Loader2, X, ArrowLeft, MapPin, ArrowUp, ArrowDown, ChevronsUpDown, Info } from "lucide-react";
 
 type SortDir = "asc" | "desc" | null;
@@ -283,8 +284,10 @@ function MatchesContent() {
                       className="grid gap-1.5 px-3 items-center min-h-[60px] hover:bg-[#FAFBFC] transition-colors w-full max-w-full"
                       style={{ gridTemplateColumns: gridTemplate }}
                     >
-                      {/* Veículo + concessionaria/vendedor como subtexto */}
-                      <div className="min-w-0 overflow-hidden">
+                      {/* Veículo: thumbnail + nome + concessionaria/vendedor como subtexto */}
+                      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                        <OfferThumb images={offer.images as OfferImage[] | undefined} size={36} />
+                        <div className="min-w-0 overflow-hidden">
                         <p className="text-[13px] font-semibold text-[#111827] leading-tight truncate" title={`${offer.brand} ${offer.model}${offer.version ? " · " + offer.version : ""}`}>
                           {offer.brand as string} {offer.model as string}
                         </p>
@@ -304,6 +307,7 @@ function MatchesContent() {
                             </p>
                           );
                         })()}
+                        </div>
                       </div>
 
                       {/* Score */}
@@ -389,10 +393,15 @@ function MatchesContent() {
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusCls}`}>{externalStatus}</span>
                         )}
                       </div>
-                      <p className="text-[15px] font-semibold text-[#111827] truncate">{offer.brand as string} {offer.model as string}</p>
-                      {offer.version ? (
-                        <p className="text-[12px] text-[#9AA0AB] truncate">{offer.version as string}</p>
-                      ) : null}
+                      <div className="flex items-start gap-3">
+                        <OfferThumb images={offer.images as OfferImage[] | undefined} size={56} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[15px] font-semibold text-[#111827] truncate">{offer.brand as string} {offer.model as string}</p>
+                          {offer.version ? (
+                            <p className="text-[12px] text-[#9AA0AB] truncate">{offer.version as string}</p>
+                          ) : null}
+                        </div>
+                      </div>
                       {(offer.external_dealership_name || offer.external_seller_name) ? (
                         <p className="text-[12px] text-[#5B6370] truncate mt-0.5">
                           {[offer.external_seller_name as string | null, offer.external_dealership_name as string | null].filter(Boolean).join(" · ")}
@@ -463,6 +472,9 @@ function MatchesContent() {
             </div>
 
             <div className="px-5 py-4 space-y-4 text-[13px]">
+              {/* Fotos do veículo (placa coberta no processamento) */}
+              <OfferGallery images={detailsOffer.images as OfferImage[] | undefined} />
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.4px] text-[#9AA0AB] mb-1">Ano</p>
