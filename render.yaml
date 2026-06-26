@@ -42,5 +42,9 @@ services:
         value: "0.15"
       - key: PLATE_HIDE_ON_DOUBT
         value: "1"
+      # Ultra-conservador: so serve fotos com placa coberta (blurred); esconde
+      # 'clean'/'hidden'. Zero vazamento. Desligue (=0) so com recall comprovado.
+      - key: PLATE_SERVE_ONLY_BLURRED
+        value: "1"
       - key: PLATE_BOX_MARGIN
         value: "0.25"

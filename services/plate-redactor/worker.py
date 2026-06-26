@@ -46,6 +46,11 @@ DOWNLOAD_TIMEOUT = float(os.getenv("DOWNLOAD_TIMEOUT_SECONDS", "20"))
 # Linhas presas em 'processing' por mais que isto (ex.: worker morto por OOM antes
 # de finalizar) voltam pra 'pending' e sao reprocessadas.
 STALE_PROCESSING_MIN = float(os.getenv("STALE_PROCESSING_MINUTES", "5"))
+# Politica ultra-conservadora (padrao): so SERVE fotos onde uma placa foi detectada
+# e coberta (action='blurred'). 'clean' (sem deteccao) pode esconder placa perdida
+# pelo modelo, entao NAO e servida. Garante zero vazamento ao custo de galerias
+# menores. Desligue (=0) so com um modelo de recall comprovadamente alto.
+SERVE_ONLY_BLURRED = os.getenv("PLATE_SERVE_ONLY_BLURRED", "1").strip().lower() in ("1", "true", "yes", "on")
 
 sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 # Instanciado so quando ha modelo (ver main). Em modo seguro fica None e o worker
@@ -153,10 +158,13 @@ def process(row: dict) -> None:
 
     action, data, has_plate, conf = detector.redact(resp.content)
 
-    if action == "hidden":
+    # So serve 'blurred' (placa coberta). 'hidden' (duvida) e 'clean' (sem deteccao,
+    # quando conservador) nao vao pro Storage nem ao frontend.
+    serve = action == "blurred" or (action == "clean" and not SERVE_ONLY_BLURRED)
+    if not serve:
         finish(row["id"], {
             "status": "hidden",
-            "action": "hidden",
+            "action": action,
             "has_plate": has_plate,
             "detection_confidence": conf,
         })
